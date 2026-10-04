@@ -1,0 +1,46 @@
+/* Owner pages use the same light surfaces as the Board and detail panel (HANDOFF.md section 11). */
+html:has(.admin), html:has(.admin) body { background: #FFFFFF; }
+.admin { --ink:#0A0A0A; --muted:#6B6B70; --line:#E7E7EA; --soft:#F3F3F5; --strength:#3DCB52; --flag:#C4501C; --danger:#D93636; --link:#0A7A2F;
+  color: var(--ink); min-height: 100vh; padding: 28px 20px 80px; }
+.admin .wrap { max-width: 980px; margin: 0 auto; padding: 0; }
+.admin a { color: var(--link); font-weight: 600; text-decoration: none; }
+.admin a:hover { text-decoration: underline; }
+.a-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 26px; }
+.a-brand { font-weight: 800; font-size: 22px; letter-spacing: -.025em; color: var(--ink) !important; }
+.a-nav { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.a-nav a, .a-nav button { background: var(--soft); border: 0; border-radius: 999px; padding: 8px 16px; font: inherit; font-weight: 600; font-size: 14px; color: var(--ink); cursor: pointer; }
+.admin h1 { font-size: clamp(30px, 4vw, 44px); line-height: 1; letter-spacing: -.03em; margin: 0 0 6px; font-weight: 700; }
+.admin h2 { font-size: 18px; margin: 34px 0 12px; font-weight: 700; }
+.a-sub { color: var(--muted); margin: 0 0 8px; max-width: 64ch; }
+.a-msg { background: var(--soft); border-radius: 14px; padding: 12px 16px; margin: 14px 0; font-weight: 600; }
+.card { border: 1px solid var(--line); border-radius: 20px; padding: 20px; margin-bottom: 14px; scroll-margin-top: 20px; }
+.card-h { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.card-h h3 { margin: 0; font-size: 22px; letter-spacing: -.02em; }
+.meta { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.badge { display: inline-block; font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px; background: var(--soft); }
+.badge.pending, .badge.validating { background: rgba(224,162,27,.15); color: #8A5A00; }
+.badge.approved, .badge.auto_published { background: rgba(61,203,82,.15); color: #1E7A30; }
+.badge.rejected { background: rgba(217,54,54,.12); color: var(--danger); }
+.scores { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin: 16px 0; }
+.scores div { background: var(--soft); border-radius: 14px; padding: 10px 14px; }
+.scores span { display: block; font-size: 12px; color: var(--muted); }
+.scores b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.chg { color: var(--flag); }
+.list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+.list li { display: flex; gap: 10px; align-items: flex-start; }
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: none; margin-top: 6px; background: #C9C9CE; }
+.dot.pass { background: var(--strength); } .dot.warn { background: #E0A21B; } .dot.fail { background: var(--danger); }
+.diff { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+.diff th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.diff td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.diff pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 260px; overflow: auto; }
+.sec-h { font-size: 13px; color: var(--muted); font-weight: 600; margin: 16px 0 0; }
+.decide { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+.decide textarea { flex: 1 1 260px; min-height: 44px; border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 10px 12px; font: inherit; }
+.btn-a { border: 0; border-radius: 999px; padding: 10px 18px; font: inherit; font-weight: 700; cursor: pointer; }
+.btn-a.go { background: #0A0A0A; color: #FFFFFF; }
+.btn-a.no { background: var(--soft); color: var(--danger); }
+.empty { color: var(--muted); padding: 18px 0; }
+.login { max-width: 380px; margin: 12vh auto 0; }
+.login input { width: 100%; border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 12px 14px; font: inherit; margin: 14px 0 10px; }
+.err { color: var(--danger); font-size: 14px; }

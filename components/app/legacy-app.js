@@ -1,0 +1,565 @@
+// Ported from docs/legacy/making-money.html (handoff v2). Kept close to the original so the design matches exactly.
+// Only the data layer (boot section at the bottom) differs.
+export function mountApp(opts){
+const OPT={
+  aiRole:["Native","Engine","Feature","None"],
+  digital:["Fully digital","Digital-led","Digitally distributed","Digitally enabled","Non-digital"],
+  form:["Mobile app","Web app/site","Desktop software","Game","API/infrastructure","Marketplace/platform","Content/media","Physical product","Hardware + software","Service","Hybrid"],
+  customer:["B2C","B2B","Prosumer","C2C/marketplace","B2B/Prosumer"],
+  model:["Subscription","Usage","Take rate","One-time purchase","Ads","Retainer/project fees","Licensing","Subscription + usage","One-time + subscription"],
+  metricType:["Revenue","ARR","Annualized run-rate","Net income","Adj. EBITDA","Free cash flow","GMV","Gross consumer spend","Units","Users","Third-party estimate","Acquisition price"],
+  tier:["Audited filing","Regulatory/acquirer filing","Company financial statements","Reputable press","Third-party analytics","Company-reported","Founder post"],
+  flags:["Hit-dependent","Decelerating","Conflicting figures","Metric-type risk","Customer concentration","Pending disclosure"]
+};
+const DIMS=[["scale","Scale"],["growth","Growth"],["profit","Profitability"],["efficiency","Efficiency"],["durability","Durability"]];
+const WEIGHT={5:1,4:.9,3:.75,2:.55,1:.3,0:0};
+const ROLE_C={Native:"var(--native)",Engine:"var(--engine)",Feature:"var(--feature)",None:"var(--none)"};
+const roleName=r=>r==="None"?"No AI":"AI "+(r||"").toLowerCase();
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const safeUrl=u=>/^https?:\/\//i.test(u||"")?u:"";
+const num=v=>Math.max(0,Math.min(5,Number(v)||0));
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+let db=null,sample=null,canWrite=false,items=[],sortKey="signal",groupKey="aiRole";
+let highlight=null; // {ids:Set} or null
+
+const initial=n=>esc((String(n||"?").match(/[\p{L}\p{N}]/u)||["?"])[0].toUpperCase());
+// Logos: an explicit `icon` wins; otherwise Brandfetch Logo API (free, must be hotlinked, never cached) from the company website.
+// Store pages (Steam, App Store) would return the store's logo, so those keep the letter tile. Missing logos 404 and fall back to the letter tile.
+const STORE_HOSTS=/(^|\.)(steampowered\.com|apple\.com|google\.com|epicgames\.com|itch\.io|gog\.com)$/i;
+const logoSrc=d=>{
+  if(d.icon&&(/^https:\/\//i.test(d.icon)||!/^[a-z]+:/i.test(d.icon)))return d.icon;
+  if(!opts.brandfetchId||!d.website)return "";
+  let h;try{h=new URL(d.website).hostname.replace(/^www\./,"")}catch{return ""}
+  if(STORE_HOSTS.test(h))return "";
+  return `https://cdn.brandfetch.io/domain/${encodeURIComponent(h)}/w/256/h/256/fallback/404/icon?c=${encodeURIComponent(opts.brandfetchId)}`;
+};
+const icoHTML=(d,cls)=>{const src=logoSrc(d);return `<span class="${cls}" aria-hidden="true" data-ini="${initial(d.name)}">${src?`<img src="${esc(src)}" alt="" loading="lazy" draggable="false">`:initial(d.name)}</span>`};
+document.addEventListener("error",e=>{const t=e.target;if(t.tagName==="IMG"&&t.parentElement?.dataset.ini){t.parentElement.textContent=t.parentElement.dataset.ini}},true);
+function derive(d){const s=d.scores||{};const strength=DIMS.reduce((a,[k])=>a+num(s[k]),0);const conf=num(d.confidence);return {...d,strength,confidence:conf,signal:+(strength*WEIGHT[conf]).toFixed(1),included:conf>=2&&strength>=12}}
+
+/* ---------- routing ---------- */
+function route(){
+  const board=location.hash==="#board";
+  if($("#sheet").classList.contains("on")&&!window._keepSheet)closeSheet();
+  $("#explore").hidden=board; $("#board").hidden=!board;
+  document.body.classList.toggle("board-mode",board);
+  const on=board?$("#tabBoard"):$("#tabExplore"), off=board?$("#tabExplore"):$("#tabBoard");
+  on.setAttribute("aria-current","page"); off.removeAttribute("aria-current");
+  if(!board) requestAnimationFrame(()=>{buildField();});
+  window.scrollTo(0,0);
+}
+addEventListener("hashchange",route);
+
+/* ---------- liquid green: AI metric cards ---------- */
+const Liquid=(()=>{
+  const RW=176,RH=116,N=6,st=new WeakMap();
+  let gl=null,u={},els=[],rafL=null;const t0=performance.now();
+  const VS="attribute vec2 a;void main(){gl_Position=vec4(a,0.,1.);}";
+  const FS=`precision mediump float;
+uniform vec2 res;uniform float t,seed;uniform vec4 m[${N}];
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+1.),f.x),f.y);}
+float fbm(vec2 p){float v=0.,a=.5;mat2 r=mat2(.8,.6,-.6,.8);for(int i=0;i<4;i++){v+=a*n(p);p=r*p*2.02;a*=.5;}return v;}
+void main(){
+  float asp=res.x/res.y;vec2 uv=gl_FragCoord.xy/res;
+  vec2 p=vec2(uv.x*asp,uv.y)*1.4+seed;vec2 disp=vec2(0.);
+  for(int i=0;i<${N};i++){vec2 mp=vec2(m[i].x*asp,m[i].y)*1.4+seed;vec2 d=p-mp;float f=exp(-dot(d,d)*5.);disp+=m[i].zw*f+vec2(-d.y,d.x)*length(m[i].zw)*f*.8;}
+  p-=disp;float T=t*.12;
+  vec2 q=vec2(fbm(p+vec2(0.,T)),fbm(p+vec2(5.2,1.3)-T));
+  vec2 r=vec2(fbm(p+3.*q+vec2(1.7,9.2)+T*1.3),fbm(p+3.*q+vec2(8.3,2.8)-T));
+  float v=fbm(p+3.*r);
+  vec3 deep=vec3(0.,.29,.12),mid=vec3(0.,.46,.19),bright=vec3(.03,.62,.27),glow=vec3(.32,.8,.52);
+  vec3 c=mix(deep,mid,smoothstep(.2,.55,v));
+  c=mix(c,bright,smoothstep(.5,.78,v+.15*q.x));
+  c=mix(c,glow,smoothstep(.6,1.,v+length(disp)*.5)*.38);
+  gl_FragColor=vec4(c,1.);
+}`;
+  try{
+    const cv=document.createElement("canvas");cv.width=RW;cv.height=RH;
+    gl=cv.getContext("webgl",{antialias:false,alpha:false,preserveDrawingBuffer:true});
+    if(gl){
+      const sh=(type,src)=>{const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw 0;return s};
+      const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,VS));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,FS));gl.linkProgram(pr);
+      if(!gl.getProgramParameter(pr,gl.LINK_STATUS))throw 0;
+      gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER,gl.createBuffer());gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+      const a=gl.getAttribLocation(pr,"a");gl.enableVertexAttribArray(a);gl.vertexAttribPointer(a,2,gl.FLOAT,false,0,0);
+      ["res","t","seed","m"].forEach(k=>u[k]=gl.getUniformLocation(pr,k));
+      gl.viewport(0,0,RW,RH);gl.uniform2f(u.res,RW,RH);
+    }
+  }catch{gl=null}
+  const buf=new Float32Array(N*4);
+  function draw(c,now){
+    const s=st.get(c);if(!s||!s.ctx)return;
+    buf.fill(0);s.pts.forEach((p,i)=>{buf.set([p.x,p.y,p.vx*6,p.vy*6],i*4)});
+    gl.uniform1f(u.t,reduce?8:(now-t0)/1000);gl.uniform1f(u.seed,s.seed);gl.uniform4fv(u.m,buf);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);s.ctx.drawImage(gl.canvas,0,0);
+  }
+  function frame(now){
+    rafL=null;if(!gl||gl.isContextLost()||$("#explore").hidden)return;
+    const vw=innerWidth,vh=innerHeight;let live=0;
+    for(const c of els){
+      if(!c.isConnected)continue;live++;
+      const s=st.get(c);s.pts.forEach(p=>{p.vx*=.955;p.vy*=.955});
+      const r=c.getBoundingClientRect();if(r.right<0||r.left>vw||r.bottom<0||r.top>vh)continue;
+      draw(c,now);
+    }
+    if(live)rafL=requestAnimationFrame(frame);
+  }
+  return {
+    ok:!!gl,
+    attach(root){
+      if(!gl||!root)return;
+      els=[...root.querySelectorAll("canvas.lq")];
+      els.forEach((c,i)=>{c.width=RW;c.height=RH;st.set(c,{seed:(i*7.31)%40,pts:[],last:null,ctx:c.getContext("2d")})});
+      if(reduce){const now=performance.now();els.forEach(c=>draw(c,now))}
+      else if(!rafL&&els.length)rafL=requestAnimationFrame(frame);
+    },
+    stir(card,e){
+      if(!gl||reduce)return;
+      const c=card.querySelector("canvas.lq"),s=c&&st.get(c);if(!s)return;
+      const r=card.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=1-(e.clientY-r.top)/r.height,now=performance.now();
+      let vx=0,vy=0;
+      if(s.last&&now-s.last.t<150){vx=x-s.last.x;vy=y-s.last.y;const m=Math.hypot(vx,vy);if(m<.008)return;if(m>.15){vx*=.15/m;vy*=.15/m}}
+      s.last={x,y,t:now};s.pts.push({x,y,vx,vy});if(s.pts.length>N)s.pts.shift();
+    }
+  };
+})();
+
+/* ---------- doodles: hand-drawn outline shapes on the yellow cards ---------- */
+let doodleN=0;
+function seeded(str){let a=2166136261;for(const ch of str)a=Math.imul(a^ch.charCodeAt(0),16777619);return()=>{a=(a+0x6D2B79F5)|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function curve(p,closed){const n=p.length,f=v=>v.toFixed(1),P=i=>closed?p[(i+n)%n]:p[Math.max(0,Math.min(n-1,i))];let d=`M${f(p[0][0])},${f(p[0][1])}`;
+  for(let i=0;i<(closed?n:n-1);i++){const p0=P(i-1),p1=P(i),p2=P(i+1),p3=P(i+2);d+=`C${f(p1[0]+(p2[0]-p0[0])/6)},${f(p1[1]+(p2[1]-p0[1])/6)} ${f(p2[0]-(p3[0]-p1[0])/6)},${f(p2[1]-(p3[1]-p1[1])/6)} ${f(p2[0])},${f(p2[1])}`}
+  return closed?d+"Z":d}
+function doodleSVG(seed){
+  // Topographic fill: contour lines of a smooth, large-scale noise field (marching squares), chained into paths so they can draw in.
+  const r=seeded(seed),W=228,H=150,C=5,gx=Math.ceil(W/C)+1,gy=Math.ceil(H/C)+1;
+  const G=10,lat=[];for(let i=0;i<(G+1)*(G+1);i++)lat.push(r());
+  const sm=t=>t*t*(3-2*t),L=(x,y)=>lat[(y%(G+1))*(G+1)+(x%(G+1))];
+  const vn=(x,y)=>{const xi=Math.floor(x),yi=Math.floor(y),xf=sm(x-xi),yf=sm(y-yi);return (L(xi,yi)*(1-xf)+L(xi+1,yi)*xf)*(1-yf)+(L(xi,yi+1)*(1-xf)+L(xi+1,yi+1)*xf)*yf};
+  const ox=r()*3,oy=r()*3,field=[];
+  for(let y=0;y<gy;y++)for(let x=0;x<gx;x++){const u=x*C/W*3.1+ox,v=y*C/H*2.1+oy;field.push(vn(u,v)*.78+vn(u*2.1+3,v*2.1+3)*.22)}
+  const F=(x,y)=>field[y*gx+x],paths=[];
+  const levels=[.26,.33,.4,.47,.54,.61,.68,.75];
+  levels.forEach((lv,li)=>{
+    const segs=[];
+    const ip=(x1,y1,v1,x2,y2,v2)=>{const t=(lv-v1)/(v2-v1);return [(x1+(x2-x1)*t)*C,(y1+(y2-y1)*t)*C]};
+    for(let y=0;y<gy-1;y++)for(let x=0;x<gx-1;x++){
+      const a=F(x,y),b=F(x+1,y),c=F(x+1,y+1),d=F(x,y+1);
+      const k=(a>lv?8:0)|(b>lv?4:0)|(c>lv?2:0)|(d>lv?1:0);if(k===0||k===15)continue;
+      const T=ip(x,y,a,x+1,y,b),R=ip(x+1,y,b,x+1,y+1,c),B=ip(x,y+1,d,x+1,y+1,c),Lf=ip(x,y,a,x,y+1,d);
+      const m={1:[[Lf,B]],2:[[B,R]],3:[[Lf,R]],4:[[T,R]],5:[[Lf,T],[B,R]],6:[[T,B]],7:[[Lf,T]],8:[[Lf,T]],9:[[T,B]],10:[[T,R],[Lf,B]],11:[[T,R]],12:[[Lf,R]],13:[[B,R]],14:[[Lf,B]]}[k];
+      m.forEach(sg=>segs.push(sg));
+    }
+    const key=p=>p[0].toFixed(2)+","+p[1].toFixed(2),ends=new Map(),used=new Array(segs.length).fill(false);
+    segs.forEach((sg,i)=>sg.forEach(p=>{const k=key(p);(ends.get(k)||ends.set(k,[]).get(k)).push(i)}));
+    for(let i=0;i<segs.length;i++){
+      if(used[i])continue;used[i]=true;const chain=[segs[i][0],segs[i][1]];
+      for(const dir of [1,0]){
+        let cur=dir?chain[chain.length-1]:chain[0];
+        for(;;){const nx=(ends.get(key(cur))||[]).find(j=>!used[j]);if(nx===undefined)break;used[nx]=true;const sg=segs[nx],nextP=key(sg[0])===key(cur)?sg[1]:sg[0];if(dir)chain.push(nextP);else chain.unshift(nextP);cur=nextP}
+      }
+      if(chain.length<4)continue;
+      const closed=key(chain[0])===key(chain[chain.length-1]);
+      const pts=closed?chain.slice(0,-1):chain;
+      paths.push({d:curve(pts,closed),dl:li*.09+r()*.15});
+    }
+  });
+  return `<svg class="doodle" viewBox="0 0 228 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${paths.map(q=>`<path pathLength="1" d="${q.d}" style="--d:${q.dl.toFixed(2)}s"/>`).join("")}</svg>`;
+}
+function playDoodle(card){const svg=card.querySelector("svg.doodle");if(!svg||reduce)return;svg.classList.remove("play");void svg.getBoundingClientRect();svg.classList.add("play")}
+let doodleIO=null;
+function watchDoodles(root){
+  doodleIO?.disconnect();if(!root||reduce||!("IntersectionObserver" in window))return;
+  doodleIO=new IntersectionObserver(es=>{for(const e of es){if(e.isIntersecting)playDoodle(e.target);else e.target.querySelector("svg.doodle")?.classList.remove("play")}},{threshold:.35});
+  root.querySelectorAll(".t-metric.volt").forEach(el=>doodleIO.observe(el));
+}
+
+/* ---------- wind: the cursor blows pill piles around, then they spring back ---------- */
+const Wind=(()=>{
+  const st=new WeakMap(),act=new Set(),R=170;let rafW=null,last=null;
+  const state=el=>{let s=st.get(el);if(!s){s={x:0,y:0,r:0,vx:0,vy:0,vr:0,base:parseFloat(el.style.getPropertyValue("--r"))||0};st.set(el,s)}return s};
+  function step(){
+    rafW=null;
+    for(const el of act){
+      const s=st.get(el);
+      if(!el.isConnected){act.delete(el);continue}
+      s.vx=(s.vx-s.x*.045)*.9;s.vy=(s.vy-s.y*.045)*.9;s.vr=(s.vr-s.r*.04)*.9;
+      s.x=Math.max(-110,Math.min(110,s.x+s.vx));s.y=Math.max(-110,Math.min(110,s.y+s.vy));s.r=Math.max(-40,Math.min(40,s.r+s.vr));
+      if(Math.abs(s.x)+Math.abs(s.y)+Math.abs(s.r)<.15&&Math.abs(s.vx)+Math.abs(s.vy)+Math.abs(s.vr)<.15){s.x=s.y=s.r=s.vx=s.vy=s.vr=0;el.style.transform="";act.delete(el);continue}
+      el.style.transform=`translate(${s.x.toFixed(1)}px,${s.y.toFixed(1)}px) rotate(${(s.base+s.r).toFixed(2)}deg)`;
+    }
+    if(act.size)rafW=requestAnimationFrame(step);
+  }
+  return {blow(e){
+    if(reduce)return;
+    const now=performance.now();let mx=0,my=0;
+    if(last&&now-last.t<120){mx=e.clientX-last.x;my=e.clientY-last.y}
+    last={x:e.clientX,y:e.clientY,t:now};
+    const sp=Math.min(60,Math.hypot(mx,my));if(sp<.5)return;
+    for(const pile of document.querySelectorAll(".pile")){
+      const pr=pile.getBoundingClientRect();
+      if(e.clientX<pr.left-R||e.clientX>pr.right+R||e.clientY<pr.top-R||e.clientY>pr.bottom+R)continue;
+      for(const el of pile.querySelectorAll(".bpill")){
+        const b=el.getBoundingClientRect(),dx=b.left+b.width/2-e.clientX,dy=b.top+b.height/2-e.clientY,d=Math.hypot(dx,dy)||1;
+        if(d>R)continue;
+        const f=(1-d/R)**2,s=state(el),push=sp*.13;
+        s.vx+=(dx/d*push+mx*.17)*f;s.vy+=(dy/d*push+my*.17)*f;s.vr+=(mx*.05-my*.02*Math.sign(dx))*f*1.4;
+        act.add(el);
+      }
+    }
+    if(act.size&&!rafW)rafW=requestAnimationFrame(step);
+  }};
+})();
+
+/* ---------- infinite canvas ---------- */
+const field=$("#field");
+let nodes=[],W=0,H=0,ox=0,oy=0,vx=0,vy=0,raf=null,drag=null,moved=false,idle=!reduce;
+const COLW=228,CELLH=228,SHORTH=150,GAP=40,PITCH=COLW+GAP,PY=CELLH+GAP;
+let GH=PY*2;
+let lastOx=0,lastOy=0,blurOn=false,bx0=0,by0=0;
+const mbG=document.getElementById("mblurG");
+
+function pillDefs(){
+  const set=new Set();
+  items.forEach(d=>{set.add("role:"+d.aiRole);set.add("form:"+d.form);set.add("digital:"+d.digital);(d.flags||[]).forEach(f=>set.add("flag:"+f))});
+  set.add("verified:1");
+  return [...set].filter(k=>!k.endsWith(":undefined")&&!k.endsWith(":"));
+}
+function pillLabel(k){const [t,v]=k.split(/:(.+)/);return t==="role"?roleName(v):t==="verified"?"Verified profit":v}
+function matchPill(k,d){const [t,v]=k.split(/:(.+)/);
+  if(t==="role")return d.aiRole===v; if(t==="form")return d.form===v; if(t==="digital")return d.digital===v; if(t==="flag")return (d.flags||[]).includes(v);
+  if(t==="verified")return /^verified/i.test(d.profitability||""); return false}
+
+function tileHTML(kind,d){
+  const c=ROLE_C[d.aiRole]||"var(--none)";
+  if(kind==="name") return `<button class="tile t-name" data-id="${esc(d.id)}"><div><div class="nm">${esc(d.name)}</div><div class="cls" style="margin-top:10px">${esc(d.form)}<br>${esc(d.digital)}</div></div><div class="foot"><span class="dotrole" style="--c:${c}">${esc(roleName(d.aiRole))}</span><div class="sg" style="text-align:right">${d.included?`<small>Signal</small>${d.signal}`:`<small>Status</small><span style="font-size:20px;color:var(--flag)">Watchlist</span>`}</div></div></button>`;
+  if(kind==="icon") return `<button class="tile-ico" data-id="${esc(d.id)}" aria-label="${esc(d.name)}" style="--c:${c}">${icoHTML(d,"ico ico-xl")}<span class="cap">${esc(d.name)}</span></button>`;
+  if(kind==="metric"){const e=(d.evidence||[])[0]||{};const lq=d.aiRole&&d.aiRole!=="None"&&Liquid.ok;return `<button class="tile t-metric${lq?" liquid":" volt"}" data-id="${esc(d.id)}">${lq?'<canvas class="lq" aria-hidden="true"></canvas>':doodleSVG(d.id+":"+(doodleN++))}<div class="lbl">${esc(d.name)} · ${esc(e.metric||"Headline metric")}${e.period?", "+esc(e.period):""}</div><div class="val${String(e.value||"").length>9?" long":""}">${esc(e.value||"No figure yet")}</div><div class="src"><span>${e.selfReported&&/^(Company-reported|Founder post)$/.test(e.tier||"")?"":esc(({"Company financial statements":"Company financials","Regulatory/acquirer filing":"Acquirer filing"})[e.tier]||e.tier||"")}</span>${e.selfReported?'<span class="self">Self-reported</span>':""}</div></button>`}
+  return `<button class="tile t-score" data-id="${esc(d.id)}"><div class="who">${esc(d.name)}</div><div><div class="k">Trust in the numbers</div><span class="pips">${[1,2,3,4,5].map(i=>`<i class="${i<=d.confidence?"on":""}"></i>`).join("")}</span></div><div><div class="k">Strength ${d.strength}/25</div><div class="bar"><span style="width:${d.strength/25*100}%"></span></div></div></button>`;
+}
+
+function groupDefs(){
+  const defs=pillDefs(),G=[["role","AI role"],["form","Product form"],["digital","Digital intensity"],["flag","Watch-outs"],["verified","Proof"]];
+  return G.map(([t,l])=>({label:l,keys:defs.filter(k=>k.split(":")[0]===t)})).filter(g=>g.keys.length);
+}
+function pileDefs(){const g=groupDefs(),proof=g.find(x=>x.label==="Proof"),out=g.filter(x=>x!==proof);if(proof){const w=out.find(x=>x.label==="Watch-outs");if(w){w.label="Proof and watch-outs";w.keys=[...proof.keys,...w.keys]}else out.push(proof)}return out}
+const TILT=[-6,4,-3,7,-8,3,6,-4,2,-7,5,-2];
+const PILLC=["cobalt","lime","chalk","peri","lime","cobalt","peri","chalk"];
+function pileHTML(g,n=0){return `<div class="pile" role="group" aria-label="${esc(g.label)}"><div class="gp">${g.keys.map((k,i)=>`<button class="bpill c-${PILLC[(i+n*3)%PILLC.length]}" data-pill="${esc(k)}" aria-pressed="${!!(highlight&&highlight.pill===k)}" style="--r:${TILT[(i+n)%TILT.length]}deg">${esc(pillLabel(k))}</button>`).join("")}</div></div>`}
+function groupHTML(g,cls=""){return `<div class="tile t-group ${cls}"><div class="gt">${esc(g.label)}</div><div class="gp">${g.keys.map(k=>`<button class="pill" data-pill="${esc(k)}" aria-pressed="${!!(highlight&&highlight.pill===k)}">${esc(pillLabel(k))}</button>`).join("")}</div></div>`}
+function buildField(){
+  if($("#explore").hidden)return;
+  const vw=field.clientWidth||innerWidth, vh=field.clientHeight||innerHeight;
+  const sorted=[...items].sort((a,b)=>b.signal-a.signal),N=sorted.length;
+  if(!N){field.innerHTML="";nodes=[];return}
+  const groups=groupDefs();
+  // One company = a block of two rows: a tall row (icon + name card) over a short row (green metric + score).
+  // Even block rows: [icon][name] / [metric][score]. Odd block rows: [name][icon] / [score][metric].
+  // Tall rows and short rows alternate, so two icons never touch.
+  const BH=CELLH+SHORTH+GAP*2,piles=pileDefs();
+  const bc=Math.max(2,Math.ceil((vw+PITCH*3)/(2*PITCH))), br=Math.max(2,Math.ceil((vh+BH*2)/BH));
+  W=bc*2*PITCH; GH=br*BH;
+  const html=[];nodes=[];let gi=0;
+  const put=(col,y,inner,ids,pills,wide,h)=>{nodes.push({bx:col*PITCH,by:y,ids,pills,mx:wide?PITCH*2:PITCH,my:(h||CELLH)+GAP});html.push(`<div class="item${wide?" wide":""}">${inner}</div>`)};
+  for(let r=0;r<br;r++)for(let c=0;c<bc;c++){
+    const x0=c*2,yT=r*BH,yS=yT+CELLH+GAP;
+    if(piles.length&&(c+r*2)%5===3){
+      // A browse block: one pile of standalone pills filling the same footprint as a company block.
+      const g=piles[gi%piles.length];put(x0,yT,pileHTML(g,gi++),null,g.keys,true,CELLH+GAP+SHORTH);
+      continue;
+    }
+    const d=sorted[(r*3+c)%N],ev=r%2===0;
+    put(ev?x0:x0+1,yT,tileHTML("icon",d),d.id);
+    put(ev?x0+1:x0,yT,tileHTML("name",d),d.id);
+    put(ev?x0:x0+1,yS,tileHTML("metric",d),d.id);
+    put(ev?x0+1:x0,yS,tileHTML("score",d),d.id);
+  }
+  field.innerHTML=`<div class="layer" id="layer">${html.join("")}</div>`;
+  [...$("#layer").children].forEach((el,i)=>nodes[i].el=el);
+  if(!window._placed&&nodes.length){window._placed=1;ox=48;oy=96;lastOx=ox;lastOy=oy}
+  applyHighlight(); paint(); Liquid.attach($("#layer")); watchDoodles($("#layer"));
+  if(!raf) raf=requestAnimationFrame(loop);
+}
+const mod=(n,m)=>((n%m)+m)%m;
+function paint(){const X=ox+aim.ax,Y=oy+aim.ay;for(const n of nodes){const x=mod(n.bx+X+n.mx,W)-n.mx,y=mod(n.by+Y+n.my,GH)-n.my;n.el.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`}}
+function motionBlur(){
+  if(reduce)return;
+  const dx=ox-lastOx,dy=oy-lastOy;lastOx=ox;lastOy=oy;
+  const bxv=Math.min(10,Math.max(0,Math.abs(dx)-4)*.26),byv=Math.min(10,Math.max(0,Math.abs(dy)-4)*.26);
+  bx0+=(bxv-bx0)*.45;by0+=(byv-by0)*.45;
+  const layer=$("#layer");if(!layer)return;
+  if(bx0<.35&&by0<.35){if(blurOn){layer.style.filter="";blurOn=false}return}
+  mbG.setAttribute("stdDeviation",bx0.toFixed(2)+" "+by0.toFixed(2));
+  if(!blurOn){layer.style.filter="url(#mblur)";blurOn=true}
+}
+const aim={on:false,x:0,y:0,overTarget:false,tx:0,ty:0,ax:0,ay:0};
+function loop(){
+  raf=null;
+  const sheetOn=$("#sheet").classList.contains("on");
+  if(!drag){
+    if(aim.on&&!sheetOn&&$("#askPanel").hidden){
+      // Cursor-lean camera: the view leans a bounded distance toward where the cursor points, then rests.
+      const w=field.clientWidth||innerWidth,h=field.clientHeight||innerHeight,nx=(aim.x/w)*2-1,ny=(aim.y/h)*2-1,dz=.08;
+      const ex=Math.sign(nx)*Math.max(0,Math.abs(nx)-dz)/(1-dz),ey=Math.sign(ny)*Math.max(0,Math.abs(ny)-dz)/(1-dz);
+      aim.tx=-ex*w*.11;aim.ty=-ey*h*.11;
+      vx*=.92;vy*=.92;
+    }
+    else if(idle&&!sheetOn){vx+=(-.35-vx)*.05;vy+=(-.18-vy)*.05}
+    else if(idle){vx=vy=0}
+    else {vx*=.94;vy*=.94}
+  }
+  if(!(aim.on&&!sheetOn&&$("#askPanel").hidden)){aim.tx=0;aim.ty=0}
+  const dax=(aim.tx-aim.ax)*.045,day=(aim.ty-aim.ay)*.045,leaning=Math.abs(dax)>.02||Math.abs(day)>.02;
+  if(leaning){aim.ax+=dax;aim.ay+=day}
+  if(Math.abs(vx)>.01||Math.abs(vy)>.01||drag||leaning){ if(!drag){ox+=vx;oy+=vy} paint() }
+  motionBlur();
+  if(!$("#explore").hidden) raf=requestAnimationFrame(loop);
+}
+field.addEventListener("pointerdown",e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,id:e.pointerId};moved=false;idle=false;vx=vy=0});
+field.addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.abs(dx)+Math.abs(dy)>5){moved=true;field.classList.add("dragging");try{field.setPointerCapture(drag.id)}catch{}}if(moved){ox+=dx;oy+=dy;vx=dx;vy=dy;drag.x=e.clientX;drag.y=e.clientY;paint()}});
+field.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"&&!reduce){const r=field.getBoundingClientRect();aim.on=true;aim.x=e.clientX-r.left;aim.y=e.clientY-r.top;aim.overTarget=!!e.target.closest("[data-id],[data-pill]");if(!raf)raf=requestAnimationFrame(loop)}if(drag&&moved)return;Wind.blow(e);const c=e.target.closest(".liquid");if(c)Liquid.stir(c,e)});
+field.addEventListener("pointerleave",()=>{aim.on=false});
+field.addEventListener("pointerover",e=>{const c=e.target.closest(".t-metric.volt");if(c&&!c.contains(e.relatedTarget))playDoodle(c)});addEventListener("blur",()=>{aim.on=false});
+const endDrag=e=>{if(!drag)return;drag=null;field.classList.remove("dragging");if(!raf)raf=requestAnimationFrame(loop)};
+field.addEventListener("pointerup",endDrag);field.addEventListener("pointercancel",endDrag);
+field.addEventListener("wheel",e=>{e.preventDefault();idle=false;ox-=e.deltaX;oy-=e.deltaY;vx=-e.deltaX*.2;vy=-e.deltaY*.2;paint();if(!raf)raf=requestAnimationFrame(loop)},{passive:false});
+field.addEventListener("keydown",e=>{const m={ArrowLeft:[80,0],ArrowRight:[-80,0],ArrowUp:[0,80],ArrowDown:[0,-80]}[e.key];if(m&&e.target===field){e.preventDefault();idle=false;ox+=m[0];oy+=m[1];paint()}});
+field.addEventListener("click",e=>{
+  if(moved){e.preventDefault();e.stopPropagation();moved=false;return}
+  const t=e.target.closest("[data-id]"); if(t){openDetail(t.dataset.id);return}
+  const p=e.target.closest("[data-pill]"); if(p)applyPill(p.dataset.pill);
+},true);
+addEventListener("resize",()=>{clearTimeout(window._rz);window._rz=setTimeout(buildField,150)});
+
+function applyPill(k){if(highlight&&highlight.pill===k){clearHighlight();return}const ids=items.filter(d=>matchPill(k,d)).map(d=>d.id);setHighlight(ids,k);showAnswer(`${pillLabel(k)}: ${ids.length} ${ids.length===1?"company":"companies"}.`,ids,"Filter")}
+function setHighlight(ids,pill){highlight={ids:new Set(ids),pill:pill||null};applyHighlight()}
+function clearHighlight(){highlight=null;applyHighlight();$("#answer").innerHTML=""}
+function applyHighlight(){
+  for(const n of nodes){
+    let dim=false;
+    if(highlight){dim=n.pills?!(highlight.pill&&n.pills.includes(highlight.pill)):!highlight.ids.has(n.ids)}
+    n.el.classList.toggle("dim",dim);
+    n.el.querySelectorAll("[data-pill]").forEach(pb=>pb.setAttribute("aria-pressed",!!(highlight&&highlight.pill===pb.dataset.pill)));
+  }
+}
+
+/* ---------- ask / search ---------- */
+function showAnswer(text,ids,source){
+  const hits=ids.map(id=>items.find(d=>d.id===id)).filter(Boolean);
+  $("#answer").innerHTML=`<div class="answer" role="status"><p>${esc(text)}</p>${hits.length?`<div class="hits">${hits.map(d=>`<button data-open="${esc(d.id)}">${esc(d.name)}</button>`).join("")}</div>`:""}<div class="meta"><span>${esc(source)}</span><button data-clear>Clear</button></div></div>`;
+}
+$("#answer").addEventListener("click",e=>{const o=e.target.closest("[data-open]");if(o)openDetail(o.dataset.open);if(e.target.closest("[data-clear]")){clearHighlight();$("#askInput").value=""}});
+$("#sugs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){$("#askInput").value=b.textContent;closePanel();ask(b.textContent)}});
+$("#browse").addEventListener("click",e=>{const b=e.target.closest("[data-pill]");if(b){closePanel();applyPill(b.dataset.pill)}});
+function openPanel(){const pnl=$("#askPanel");if(!pnl.hidden)return;
+  const defs=pillDefs(),groups=[["verified","Proof"],["role","AI role"],["form","Product form"],["digital","Digital intensity"],["flag","Watch-outs"]];
+  const btn=k=>`<button type="button" data-pill="${esc(k)}" aria-pressed="${!!(highlight&&highlight.pill===k)}">${esc(pillLabel(k))}</button>`;
+  $("#browse").innerHTML=defs.length?groups.map(([t,l])=>{const ks=defs.filter(k=>k.split(":")[0]===t).sort((a,b)=>pillLabel(a).localeCompare(pillLabel(b)));return ks.length?`<div class="grp"><h5>${l}</h5><div class="opts">${ks.map(btn).join("")}</div></div>`:""}).join(""):'<p class="status">Categories appear once companies load.</p>';
+  pnl.hidden=false;$("#answer").hidden=true;$("#askInput").setAttribute("aria-expanded","true")}
+function closePanel(){$("#askPanel").hidden=true;$("#answer").hidden=false;$("#askInput").setAttribute("aria-expanded","false")}
+$("#askInput").addEventListener("focus",openPanel);
+$("#askInput").addEventListener("keydown",e=>{if(e.key==="Escape"){closePanel();e.target.blur()}});
+document.addEventListener("pointerdown",e=>{if(!$("#askPanel").hidden&&!e.target.closest(".ask"))closePanel()});
+$("#askForm").addEventListener("submit",e=>{e.preventDefault();const q=$("#askInput").value.trim();if(q){closePanel();ask(q)}});
+
+function localMatch(q){
+  const s=q.toLowerCase();
+  let ids=items.filter(d=>[d.name,d.form,d.digital,d.aiRole,roleName(d.aiRole),d.customer,d.model,...(d.flags||[]),d.summary].join(" ").toLowerCase().includes(s)).map(d=>d.id);
+  if(!ids.length){
+    const rules=[[/profit/,d=>/^verified/i.test(d.profitability||"")],[/non-ai|no ai|without ai|traditional/,d=>d.aiRole==="None"],[/\bai\b/,d=>d.aiRole!=="None"],[/physical|product|hardware/,d=>/Physical|Hardware/.test(d.form)],[/game/,d=>d.form==="Game"],[/hype|thin|claims/,d=>d.strength>=12&&d.confidence<=2],[/app|software|saas/,d=>/app|software/i.test(d.form)],[/acquir/,d=>(d.evidence||[]).some(e=>e.type==="Acquisition price")]];
+    rules.forEach(([re,fn])=>{if(re.test(s))ids.push(...items.filter(fn).map(d=>d.id))});
+    ids=[...new Set(ids)];
+  }
+  return ids;
+}
+let askCtl=null;
+async function ask(q){
+  const exact=items.find(d=>d.name.toLowerCase()===q.toLowerCase());
+  if(exact){setHighlight([exact.id]);showAnswer(`${exact.name}: signal ${exact.included?exact.signal:"watchlist"}, trust ${exact.confidence}/5, strength ${exact.strength}/25.`,[exact.id],"Exact match");openDetail(exact.id);return}
+  const local=localMatch(q);
+  if(!sample){setHighlight(local);showAnswer(local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Nothing in the ledger matches that yet. Try a company name, a category like games or physical products, or open the board.",local,"Keyword match");return}
+  const btn=$("#askBtn"); btn.disabled=true; btn.textContent="Thinking…";
+  $("#answer").innerHTML=`<div class="answer" role="status"><p>Mapping your question to the ledger…</p></div>`;
+  askCtl?.abort(); askCtl=new AbortController();
+  const data=items.map(d=>({id:d.id,name:d.name,form:d.form,customer:d.customer,model:d.model,digital:d.digital,aiRole:d.aiRole,confidence:d.confidence,strength:d.strength,signal:d.signal,included:d.included,profitability:d.profitability,flags:d.flags,summary:d.summary,headline:(d.evidence||[])[0]}));
+  const prompt=`You help someone explore a research ledger of emerging companies. Each company has an evidence confidence score (0-5, how trustworthy the numbers are) and a commercial strength score (0-25). "included" false means watchlist. Only use the data below; never add outside facts. If the data cannot answer, say so plainly and suggest what to search instead.
+
+DATA: ${JSON.stringify(data)}
+
+QUESTION: ${q}
+
+Respond with JSON only, no markdown: {"ids":["company ids that answer the question, most relevant first; empty if none"],"answer":"1-2 plain sentences answering from the data, mentioning confidence where it matters"}`;
+  try{
+    const r=await sample.json(q,{signal:askCtl.signal});
+    const ids=(Array.isArray(r?.ids)?r.ids:[]).filter(id=>items.some(d=>d.id===id));
+    if(ids.length)setHighlight(ids); else clearHighlight();
+    showAnswer(r?.answer||"No answer came back. Try rephrasing.",ids,"Answered from the ledger by Claude");
+  }catch(err){
+    if(err?.code==="cancelled")return;
+    if(err?.code==="not_granted")sample=null;
+    setHighlight(local);showAnswer(local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Couldn't interpret that right now. Try a company name or a category.",local,err?.code==="rate_limited"?"Keyword match (Claude is busy, try again shortly)":"Keyword match");
+  }finally{btn.disabled=false;btn.textContent="Search"}
+}
+
+/* ---------- board ---------- */
+function fillFilters(){
+  [["fRole","aiRole"],["fDig","digital"],["fForm","form"]].forEach(([id,k])=>{const el=$("#"+id);OPT[k].forEach(o=>el.insertAdjacentHTML("beforeend",`<option>${esc(o)}</option>`));el.addEventListener("change",renderBoard)});
+  $("#q").addEventListener("input",renderBoard);
+  $("#legend").innerHTML=OPT.aiRole.map(r=>`<span style="--c:${ROLE_C[r]}">${roleName(r)}</span>`).join("");
+}
+function filtered(){const q=$("#q").value.trim().toLowerCase(),r=$("#fRole").value,g=$("#fDig").value,f=$("#fForm").value;return items.filter(d=>(!q||(d.name||"").toLowerCase().includes(q))&&(!r||d.aiRole===r)&&(!g||d.digital===g)&&(!f||d.form===f))}
+function renderStats(){const el=$("#stats");if(!el)return;if(!items.length){el.innerHTML="";return}
+  const top=[...items].filter(d=>d.included).sort((a,b)=>b.signal-a.signal)[0],ver=items.filter(d=>profitState(d)==="verified").length,watch=items.filter(d=>!d.included).length,trusted=items.filter(d=>d.confidence>=3).length;
+  const st=(k,v,sub)=>`<div class="stat"><span class="k">${k}</span><b>${v}</b><span class="s">${sub}</span></div>`;
+  el.innerHTML=st("Top signal",top?esc(top.name):"None yet",top?`Signal ${top.signal}`:"")+st("Profit verified",ver,`of ${items.length} companies`)+st("Solid evidence",trusted,"filings, results or reputable press")+st("Watchlist",watch,"not enough proof yet")}
+function renderBoard(){renderStats();const l=filtered();renderPlot(l);renderCohort(l);renderRows(l);$("#count").textContent=items.length?`${l.length} of ${items.length} shown`:""}
+function renderPlot(list){
+  const W2=640,H2=420,L=44,R=16,T=30,B=40,pw=W2-L-R,ph=H2-T-B,x=v=>L+v/25*pw,y=v=>T+ph-v/5*ph;
+  let g=`<rect x="${x(12)}" y="${y(5)}" width="${x(25)-x(12)}" height="${y(3)-y(5)}" fill="var(--zone-good)"/><rect x="${x(12)}" y="${y(2.5)}" width="${x(25)-x(12)}" height="${y(0)-y(2.5)}" fill="var(--zone-hype)"/>
+  <text class="zl" x="${x(12)+8}" y="${y(5)+16}" style="fill:#1E8F3A">Verified and strong</text><text class="zl" x="${x(24.6)}" y="${y(0)-10}" text-anchor="end" style="fill:var(--flag)">Strong claims, thin evidence</text>`;
+  for(let i=0;i<=5;i++)g+=`<line x1="${L}" x2="${W2-R}" y1="${y(i)}" y2="${y(i)}" stroke="var(--line)"/><text x="${L-10}" y="${y(i)+4}" text-anchor="end">${i}</text>`;
+  for(let i=0;i<=25;i+=5)g+=`<text x="${x(i)}" y="${H2-B+18}" text-anchor="middle">${i}</text>`;
+  g+=`<line x1="${x(12)}" x2="${x(12)}" y1="${T}" y2="${T+ph}" stroke="var(--muted)" stroke-dasharray="4 4"/><line x1="${L}" x2="${W2-R}" y1="${y(2)}" y2="${y(2)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${L+pw/2}" y="${H2-4}" text-anchor="middle">Business strength (0 to 25)</text><text transform="translate(12 ${T+ph/2}) rotate(-90)" text-anchor="middle">Trust in the numbers (0 to 5)</text>`;
+  const seen={},rowsUsed={};
+  const pts=[...list].sort((a,b)=>a.confidence-b.confidence||a.strength-b.strength).map(d=>{const k=d.strength+"_"+d.confidence,n=seen[k]=(seen[k]||0)+1;return {d,cx:x(d.strength),cy:y(d.confidence)-(n-1)*14}});
+  const rects=pts.map(p=>({x1:p.cx-9,x2:p.cx+9,y1:p.cy-9,y2:p.cy+9}));
+  const ov=(a,b)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
+  let labels="",dots="";
+  pts.forEach(p=>{const w=p.d.name.length*6.4+4;let best=null;
+    const cands=[];[0,-16,16,-30,30,-44,44,-58,58].forEach(dy=>{cands.push({side:1,dy});cands.push({side:-1,dy})});
+    for(const c of cands){const lx=p.cx+c.side*11,ly=p.cy+4+c.dy;const r=c.side>0?{x1:lx,x2:lx+w,y1:ly-10,y2:ly+2}:{x1:lx-w,x2:lx,y1:ly-10,y2:ly+2};
+      if(r.x2>W2-2||r.x1<L+2||r.y1<2||r.y2>T+ph)continue;
+      if(!rects.some(q=>ov(q,r))){best={...c,lx,ly,r};break}}
+    if(!best){const lx=p.cx+11,ly=p.cy+4;best={side:1,dy:0,lx,ly,r:{x1:lx,x2:lx+w,y1:ly-10,y2:ly+2}}}
+    rects.push(best.r);
+    const lead=best.dy!==0?`<line x1="${p.cx}" y1="${p.cy}" x2="${best.side>0?best.lx-2:best.lx+2}" y2="${best.ly-4}" stroke="var(--muted)" stroke-width=".8"/>`:"";
+    labels+=`${lead}<text class="dl" x="${best.lx}" y="${best.ly}" text-anchor="${best.side>0?"start":"end"}">${esc(p.d.name)}</text>`;
+    dots+=`<circle cx="${p.cx}" cy="${p.cy}" r="7" fill="${ROLE_C[p.d.aiRole]||"var(--none)"}" stroke="var(--panel)" stroke-width="2" tabindex="0" role="button" data-id="${esc(p.d.id)}" aria-label="${esc(p.d.name)}" style="cursor:pointer"/>`});
+  g+=labels+dots;
+  const svg=$("#plot");svg.innerHTML=g;
+  svg.querySelectorAll("circle").forEach(c=>{c.addEventListener("click",()=>openDetail(c.dataset.id));c.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openDetail(c.dataset.id)}})});
+}
+const median=a=>{if(!a.length)return 0;const s=[...a].sort((p,q)=>p-q),m=s.length>>1;return s.length%2?s[m]:(s[m-1]+s[m])/2};
+function renderCohort(list){
+  const groups={};list.forEach(d=>{const k=d[groupKey]||"Unclassified";(groups[k]=groups[k]||[]).push(d)});
+  const o=OPT[groupKey]||[],idx=k=>o.indexOf(k)<0?99:o.indexOf(k);
+  const keys=Object.keys(groups).sort((a,b)=>idx(a)-idx(b));
+  $("#cohort").innerHTML=keys.length?keys.map(k=>{const g=groups[k],ms=median(g.map(d=>d.strength)),mc=median(g.map(d=>d.confidence));
+    return `<div><div class="gname">${esc(groupKey==="aiRole"?roleName(k):k)}<small>${g.length} ${g.length===1?"company":"companies"}</small></div><div class="mbar"><span>Strength</span><div class="track"><div class="fill" style="width:${ms/25*100}%;background:var(--strength)"></div></div><span>${ms.toFixed(1)}</span></div><div class="mbar"><span>Trust</span><div class="track"><div class="fill" style="width:${mc/5*100}%;background:var(--trust)"></div></div><span>${mc.toFixed(1)}</span></div></div>`}).join(""):`<div class="empty">No companies match these filters.</div>`;
+}
+function renderRows(list){
+  const el=$("#rows"); if(!db)return;
+  if(!items.length){el.innerHTML=`<div class="empty">No companies yet. ${canWrite?"Add one, or send a research batch through the agent API.":"Ask the owner to add companies."}</div>`;return}
+  const s=[...list].sort((a,b)=>sortKey==="name"?(a.name||"").localeCompare(b.name||""):(b[sortKey]-a[sortKey])||(b.signal-a.signal));
+  if(!s.length){el.innerHTML=`<div class="empty">No companies match these filters. Clear the search or filters to see everything.</div>`;return}
+  el.innerHTML=s.map(d=>`<div class="row" tabindex="0" role="button" data-id="${esc(d.id)}"><div class="nm">${icoHTML(d,"ico ico-s")}<div style="min-width:0">${esc(d.name)}<small>${esc(d.form||"")}${d.customer?" for "+esc(d.customer):""}</small></div></div><div class="c-role"><span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></div><div class="c-conf"><span class="bpips" aria-label="Trust ${d.confidence} of 5">${[1,2,3,4,5].map(i=>`<i class="${i<=d.confidence?"on":""}"></i>`).join("")}</span><small class="tw">${esc(TRUST_WORD[d.confidence])}</small></div><div class="c-str"><div class="sbar"><div class="track"><div class="fill" style="width:${d.strength/25*100}%;background:var(--strength)"></div></div><span>${d.strength}</span></div></div><div class="sigc">${d.included?`<div class="sig">${d.signal}</div>`:`<span class="watch">Watchlist</span>`}</div><div class="meta"><span>${esc(roleName(d.aiRole))}</span><span>Trust ${d.confidence}/5</span><span>Strength ${d.strength}/25</span></div></div>`).join("");
+  el.querySelectorAll(".row").forEach(r=>{r.addEventListener("click",()=>openDetail(r.dataset.id));r.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openDetail(r.dataset.id)}})});
+}
+$("#lhead").addEventListener("click",e=>{const b=e.target.closest("[data-sort]");if(!b)return;sortKey=b.dataset.sort;document.querySelectorAll("[data-sort]").forEach(x=>x.removeAttribute("aria-sort"));b.setAttribute("aria-sort","descending");renderBoard()});
+$("#seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;groupKey=b.dataset.k;$("#seg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));renderBoard()});
+
+/* ---------- sheet: detail + form ---------- */
+let lastFocus=null;
+function openSheet(html){lastFocus=document.activeElement;$("#sheetIn").innerHTML=html;$("#sheet").classList.add("on");$("#scrim").classList.add("on");setTimeout(()=>$("#sheetIn").querySelector("button,input")?.focus(),60)}
+function closeSheet(){$("#sheet").classList.remove("on");$("#scrim").classList.remove("on");lastFocus?.focus?.()}
+$("#scrim").addEventListener("click",closeSheet);
+addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#sheet").classList.contains("on"))closeSheet()});
+
+const TRUST_WORD=["No revenue evidence","Founder post or single source","Company claim or estimate","Company results or reputable press","Regulatory or acquirer filing","Audited filing"];
+const strengthWord=v=>v>=20?"Very strong":v>=15?"Strong":v>=12?"Moderate":"Too early to call";
+function profitState(d){const p=d.profitability||"";return /^verified/i.test(p)?"verified":/claim|company-reported|self-reported/i.test(p)?"claimed":"none"}
+const PROFIT_HEAD={verified:"Profit verified",claimed:"Profit claimed, not verified",none:"Profit not verified"};
+function openDetail(id){
+  const d=items.find(i=>i.id===id);if(!d)return;
+  const e=(d.evidence||[])[0]||{},ps=profitState(d),sc=d.scores||{};
+  const bar=(label,v,max,word)=>`<div class="vrow"><span class="vl">${label}</span><div class="vtrack"><span style="width:${v/max*100}%"></span></div><span class="vw"><b>${v}/${max}</b>${word?" "+esc(word):""}</span></div>`;
+  const ev=(d.evidence||[]).map(x=>{const u=safeUrl(x.url);return `<li><div class="ev-v"><b>${esc(x.value)}</b><span>${esc(x.metric)}${x.period?", "+esc(x.period):""}</span></div><div class="ev-s"><span>${esc(x.tier)}</span>${x.selfReported?'<span class="tag">Self-reported</span>':""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.source||"Source")} ↗</a>`:(x.source?`<span>${esc(x.source)}</span>`:"")}</div></li>`}).join("");
+  const fact=(k,v)=>v?`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`:"";
+  openSheet(`<div class="dh"><div class="dh-id">${icoHTML(d,"ico")}<div><h3>${esc(d.name)}</h3><p class="dh-sub">${esc(d.form||"")}${d.customer?" · "+esc(d.customer):""} · <span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></p></div></div><div class="dh-act">${safeUrl(d.website)?`<a class="btn visit" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">Visit site <span aria-hidden="true">↗</span></a>`:""}<button class="xbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div></div>
+  <section class="verdict">
+    <div class="v-top"><div class="v-fig"><div class="v-num">${esc(e.value||"No figure yet")}</div><div class="v-cap">${esc(e.metric||"")}${e.period?", "+esc(e.period):""}${e.selfReported?' <span class="tag">Self-reported</span>':""}</div></div>
+    <div class="v-sig">${d.included?`<span>Signal</span><b>${d.signal}</b>`:`<span>Status</span><b class="watch">Watchlist</b>`}</div></div>
+    ${d.summary?`<p class="v-sum">${esc(d.summary)}</p>`:""}
+    <div class="vbars">${bar("Trust in the numbers",d.confidence,5,TRUST_WORD[d.confidence])}${bar("Business strength",d.strength,25,strengthWord(d.strength))}</div>
+  </section>
+  <div class="pf pf-${ps}"><span class="pf-dot" aria-hidden="true"></span><div><b>${PROFIT_HEAD[ps]}</b>${/^not publicly verified\.?$/i.test((d.profitability||"").trim())||!d.profitability?"":`<span>${esc(d.profitability)}</span>`}</div></div>
+  <div class="cols">${d.trigger?`<section class="sec"><h4>Why it's on the list</h4><p>${esc(d.trigger)}</p></section>`:""}${d.caveats?`<section class="sec"><h4>What could make this wrong</h4><p>${esc(d.caveats)}</p></section>`:""}</div>
+  ${(d.flags||[]).length?`<section class="sec"><h4>Watch-outs</h4><div class="flags">${d.flags.map(f=>`<span>${esc(f)}</span>`).join("")}</div></section>`:""}
+  <section class="sec"><h4>Score breakdown</h4><div class="vbars">${DIMS.map(([k,l])=>bar(l,num(sc[k]),5,"")).join("")}</div></section>
+  <section class="sec"><h4>Evidence</h4>${ev?`<ul class="evl">${ev}</ul>`:"<p>No evidence logged yet.</p>"}</section>
+  <section class="sec"><h4>Details</h4><dl class="facts">${safeUrl(d.website)?`<div><dt>Website</dt><dd><a class="wlink" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">${esc(d.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))} ↗</a></dd></div>`:""}${fact("Revenue model",d.model)}${fact("Customer",d.customer)}${fact("Digital intensity",d.digital)}${fact("Launched",d.launched)}${fact("Re-check when",d.recheck)}</dl></section>
+  <div class="actions">${location.hash!=="#board"?`<a class="btn" href="#board" data-goboard>See it on the board</a>`:""}${canWrite?`<button class="btn danger" data-del>Delete</button><button class="btn primary" data-edit>Edit</button>`:""}</div>`);
+  const sh=$("#sheetIn");
+  sh.querySelector("[data-close]").addEventListener("click",closeSheet);
+  sh.querySelector("[data-goboard]")?.addEventListener("click",()=>{closeSheet();setTimeout(()=>{$("#q").value=d.name;renderBoard()},50)});
+  sh.querySelector("[data-edit]")?.addEventListener("click",()=>openForm(d));
+  sh.querySelector("[data-del]")?.addEventListener("click",async ev2=>{const t=ev2.target;if(t.dataset.c!=="1"){t.dataset.c="1";t.textContent="Click again to delete";return}try{await db.collection("companies").doc(d.id).delete();closeSheet()}catch{t.textContent="Couldn't delete. Try again."}});
+}
+const sel=(n,o,v)=>`<select name="${n}">${o.map(x=>`<option ${String(x)===String(v)?"selected":""}>${esc(x)}</option>`).join("")}</select>`;
+const evRow=(e={})=>`<div class="evrow"><input name="ev_metric" placeholder="Metric" value="${esc(e.metric)}" aria-label="Metric"><input name="ev_value" placeholder="Value" value="${esc(e.value)}" aria-label="Value"><input name="ev_period" placeholder="Period" value="${esc(e.period)}" aria-label="Period">${sel("ev_type",OPT.metricType,e.type||"Revenue")}${sel("ev_tier",OPT.tier,e.tier||"Reputable press")}<input name="ev_source" placeholder="Source name" value="${esc(e.source)}" aria-label="Source name"><input name="ev_url" placeholder="https://" value="${esc(e.url)}" aria-label="Source link" style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px"><input type="checkbox" name="ev_self" ${e.selfReported?"checked":""} style="width:auto"> Self-reported</label><button type="button" class="x">Remove row</button></div>`;
+function openForm(d){
+  const isNew=!d;d=d||{scores:{},flags:[],evidence:[{}],confidence:2};const s=d.scores||{};
+  openSheet(`<div class="sh-head"><h3 style="font-size:30px">${isNew?"Add company":"Edit "+esc(d.name)}</h3><button class="xbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
+  <form id="f" novalidate><div class="fgrid" style="margin-top:14px">
+    <label class="full">Name<input name="name" value="${esc(d.name)}"></label>
+    <label>Product form${sel("form",OPT.form,d.form)}</label><label>Customer${sel("customer",OPT.customer,d.customer)}</label>
+    <label>Revenue model${sel("model",OPT.model,d.model)}</label><label>Digital intensity${sel("digital",OPT.digital,d.digital)}</label>
+    <label>AI role${sel("aiRole",OPT.aiRole,d.aiRole||"None")}</label><label>Launched or broke out<input name="launched" value="${esc(d.launched)}"></label>
+    <label class="full">Website<input name="website" type="url" inputmode="url" placeholder="https://" value="${esc(d.website)}"></label>
+    <label class="full">Why it qualifies now<input name="trigger" value="${esc(d.trigger)}"></label></div>
+    <fieldset><legend>Scores</legend><div class="dimgrid"><label>Trust in the numbers${sel("confidence",[0,1,2,3,4,5],d.confidence)}</label>${DIMS.map(([k,l])=>`<label>${l}${sel("s_"+k,[0,1,2,3,4,5],num(s[k]))}</label>`).join("")}</div><div class="live" id="live"></div></fieldset>
+    <div class="fgrid" style="margin-top:14px"><label class="full">Profitability<input name="profitability" value="${esc(d.profitability)}" placeholder="Not publicly verified."></label><label class="full">Signal summary<textarea name="summary">${esc(d.summary)}</textarea></label><label class="full">Caveats<textarea name="caveats">${esc(d.caveats)}</textarea></label><label class="full">Re-check when<input name="recheck" value="${esc(d.recheck)}"></label></div>
+    <fieldset><legend>Flags</legend><div class="flagchecks">${OPT.flags.map(f=>`<label><input type="checkbox" name="flag" value="${esc(f)}" ${(d.flags||[]).includes(f)?"checked":""}> ${esc(f)}</label>`).join("")}</div></fieldset>
+    <fieldset><legend>Evidence</legend><div id="evs">${(d.evidence&&d.evidence.length?d.evidence:[{}]).map(evRow).join("")}</div><button type="button" class="btn" id="addEv">Add evidence row</button></fieldset>
+    <div class="err" id="ferr" role="alert"></div><div class="actions"><button type="submit" class="btn primary">${isNew?"Add company":"Save changes"}</button></div></form>`);
+  const f=$("#f");
+  const live=()=>{const t=derive(collect(f));$("#live").innerHTML=`Strength <b>${t.strength}/25</b> · Signal <b>${t.included?t.signal:"watchlist"}</b>${t.included?"":" (needs trust of 2 or more and strength of 12 or more)"}`};
+  f.addEventListener("change",live);live();
+  $("#sheetIn [data-close]").addEventListener("click",()=>isNew?closeSheet():openDetail(d.id));
+  $("#addEv").addEventListener("click",()=>$("#evs").insertAdjacentHTML("beforeend",evRow()));
+  $("#evs").addEventListener("click",e=>{if(e.target.classList.contains("x"))e.target.closest(".evrow").remove()});
+  f.addEventListener("submit",async e=>{e.preventDefault();const data=collect(f);if(!data.name){$("#ferr").textContent="Add a company name to save.";return}
+    const id=d.id||data.name.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,60)||"co-"+Date.now();
+    const b=f.querySelector("[type=submit]");b.disabled=true;
+    try{await db.collection("companies").doc(id).set({...data,updatedAt:new Date().toISOString()});let n=0;const t=setInterval(()=>{if(items.find(i=>i.id===id)||n++>20){clearInterval(t);openDetail(id)}},100)}
+    catch(err){b.disabled=false;$("#ferr").textContent=err?.code==="quota_exceeded"?"The ledger is full. Delete some entries, then save again.":(err?.message||"Couldn't save. Check your connection and try again.")}});
+}
+function collect(f){const fd=new FormData(f),g=k=>(fd.get(k)||"").toString().trim();
+  const ev=[...f.querySelectorAll(".evrow")].map(r=>({metric:r.querySelector("[name=ev_metric]").value.trim(),value:r.querySelector("[name=ev_value]").value.trim(),period:r.querySelector("[name=ev_period]").value.trim(),type:r.querySelector("[name=ev_type]").value,tier:r.querySelector("[name=ev_tier]").value,source:r.querySelector("[name=ev_source]").value.trim(),url:r.querySelector("[name=ev_url]").value.trim(),selfReported:r.querySelector("[name=ev_self]").checked})).filter(e=>e.metric||e.value);
+  return {name:g("name"),form:g("form"),customer:g("customer"),model:g("model"),digital:g("digital"),aiRole:g("aiRole"),launched:g("launched"),website:/^https?:\/\//i.test(g("website"))?g("website"):(g("website")?"https://"+g("website"):""),trigger:g("trigger"),confidence:Number(g("confidence")),scores:Object.fromEntries(DIMS.map(([k])=>[k,Number(g("s_"+k))])),profitability:g("profitability")||"Not publicly verified.",summary:g("summary"),caveats:g("caveats"),recheck:g("recheck"),flags:fd.getAll("flag").map(String),evidence:ev}}
+$("#addBtn").addEventListener("click",()=>openForm(null));
+
+/* ---------- boot (Vercel version) ---------- */
+// Reads come from the server. Owner writes go to /api/admin/companies/:id. Same Firestore-style surface the original code expects.
+let lastData=JSON.stringify(opts.initial||[]);
+async function refresh(){
+  try{const r=await fetch("/api/companies",{cache:"no-store"});if(!r.ok)return;const j=await r.json();const s=JSON.stringify(j.companies||[]);if(s===lastData)return;lastData=s;items=(j.companies||[]).map(derive);renderBoard();buildField()}catch{}
+}
+async function send(method,id,body){
+  const r=await fetch(`/api/admin/companies/${encodeURIComponent(id)}`,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
+  if(!r.ok){const j=await r.json().catch(()=>({}));const err=new Error(j.error||"Couldn't save. Try again.");err.code=j.code;throw err}
+  await refresh();
+}
+db={collection:()=>({doc:id=>({set:data=>send("PUT",id,data),delete:()=>send("DELETE",id)})})};
+sample=opts.askEnabled?{async json(q,{signal}={}){
+  let r;
+  try{r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q}),signal})}
+  catch(e){const err=new Error("cancelled");err.code=e?.name==="AbortError"?"cancelled":"network";throw err}
+  if(r.status===429){const err=new Error("busy");err.code="rate_limited";throw err}
+  if(!r.ok){const err=new Error("failed");err.code=r.status===404?"not_granted":"failed";throw err}
+  return r.json();
+}}:null;
+canWrite=!!opts.canWrite;
+fillFilters(); route();
+items=(opts.initial||[]).map(derive);
+$("#addBtn").hidden=!canWrite;
+$("#status").textContent=canWrite?"Signed in as owner":"Live data";
+if(canWrite){$("#addBtn").insertAdjacentHTML("beforebegin",`<a class="btn" href="/admin/review" style="text-decoration:none">Review queue</a>`)}
+renderBoard(); buildField();
+addEventListener("focus",refresh);
+setInterval(()=>{if(!document.hidden)refresh()},120000);
+}

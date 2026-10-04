@@ -1,0 +1,486 @@
+[
+  {
+    "id": "applovin",
+    "aiRole": "Engine",
+    "caveats": "Slight Q2 revenue miss vs. consensus; heavy dependence on mobile gaming advertisers.",
+    "confidence": 5,
+    "customer": "B2B",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "Revenue",
+        "period": "Q2 2026",
+        "selfReported": false,
+        "source": "AppLovin Q2 2026 results",
+        "tier": "Audited filing",
+        "type": "Revenue",
+        "url": "https://investors.applovin.com/news/news-details/2026/AppLovin-Announces-Second-Quarter-2026-Financial-Results/default.aspx",
+        "value": "$1,924M"
+      },
+      {
+        "metric": "Net income",
+        "period": "Q2 2026",
+        "selfReported": false,
+        "source": "AppLovin Q2 2026 results",
+        "tier": "Audited filing",
+        "type": "Net income",
+        "url": "https://investors.applovin.com/news/news-details/2026/AppLovin-Announces-Second-Quarter-2026-Financial-Results/default.aspx",
+        "value": "$1,267M"
+      }
+    ],
+    "flags": [],
+    "form": "API/infrastructure",
+    "launched": "2012 (step-change 2024–26)",
+    "model": "Take rate",
+    "name": "AppLovin",
+    "profitability": "Verified: Q2 2026 GAAP net income $1,267M; free cash flow $863M.",
+    "recheck": "Q3 2026 earnings (guided $2,055–2,085M revenue)",
+    "scores": {
+      "durability": 5,
+      "efficiency": 5,
+      "growth": 4,
+      "profit": 5,
+      "scale": 5
+    },
+    "summary": "Public ad-tech platform with audited growth and very high margins. Q2 2026 revenue $1,924M, up 53% year over year.",
+    "trigger": "ML ad engine driving 50%+ growth at 80%+ EBITDA margins",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://www.applovin.com",
+    "watch": {
+      "secCik": "1751008"
+    }
+  },
+  {
+    "id": "cursor",
+    "aiRole": "Native",
+    "caveats": "Sources conflict by >25%; all figures are anonymous or company run-rates. Confidence: base 2, −1 conflict, +1 disclosed acquisition.",
+    "confidence": 2,
+    "customer": "B2B/Prosumer",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "Acquisition value",
+        "period": "June 2026",
+        "selfReported": false,
+        "source": "Tech Insider summary",
+        "tier": "Reputable press",
+        "type": "Acquisition price",
+        "url": "https://tech-insider.org/cursor-60-billion-valuation-anysphere-ai-coding-2026/",
+        "value": "$60B (all-stock)"
+      },
+      {
+        "metric": "Annualized revenue",
+        "period": "May–June 2026",
+        "selfReported": false,
+        "source": "Visionary Talks summary",
+        "tier": "Reputable press",
+        "type": "Annualized run-rate",
+        "url": "https://visionarytalks.com/who-owns-cursor/",
+        "value": "$2.6B–$4B+"
+      }
+    ],
+    "flags": [
+      "Conflicting figures",
+      "Metric-type risk"
+    ],
+    "form": "Desktop software",
+    "launched": "2023",
+    "model": "Subscription + usage",
+    "name": "Cursor",
+    "profitability": "Not publicly verified.",
+    "recheck": "SpaceX disclosures after deal close",
+    "scores": {
+      "durability": 3,
+      "efficiency": 3,
+      "growth": 5,
+      "profit": 1,
+      "scale": 5
+    },
+    "summary": "AI code editor with the fastest reported revenue ramp in software. Run-rate figures range from $2.6B to $4B+.",
+    "trigger": "$60B all-stock acquisition by SpaceX announced June 2026",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://cursor.com"
+  },
+  {
+    "id": "gruns",
+    "aiRole": "None",
+    "caveats": "Revenue is a self-reported run rate; the widely cited $1.2B total price is press-reported, not disclosed.",
+    "confidence": 3,
+    "customer": "B2C",
+    "digital": "Digitally distributed",
+    "evidence": [
+      {
+        "metric": "Acquisition (80% stake)",
+        "period": "June 2026",
+        "selfReported": false,
+        "source": "Unilever Form 6-K",
+        "tier": "Regulatory/acquirer filing",
+        "type": "Acquisition price",
+        "url": "https://www.sec.gov/Archives/edgar/data/0000217410/000021741026000057/ul-20260630.htm",
+        "value": "€767M"
+      },
+      {
+        "metric": "Annualized run rate",
+        "period": "Oct 2025",
+        "selfReported": true,
+        "source": "Modern Retail",
+        "tier": "Company-reported",
+        "type": "Annualized run-rate",
+        "url": "https://www.modernretail.co/operations/a-timeline-of-what-led-up-to-gruns-being-acquired-by-unilever/",
+        "value": ">$300M"
+      }
+    ],
+    "flags": [
+      "Metric-type risk"
+    ],
+    "form": "Physical product",
+    "launched": "2023",
+    "model": "Subscription",
+    "name": "Grüns",
+    "profitability": "Founder-claimed profitable within ~14 months; not publicly verified.",
+    "recheck": "Unilever segment disclosures",
+    "scores": {
+      "durability": 4,
+      "efficiency": 5,
+      "growth": 5,
+      "profit": 3,
+      "scale": 4
+    },
+    "summary": "Gummy greens supplement built on DTC subscription, then retail. Unilever's filing shows 80% acquired for €767M.",
+    "trigger": "Acquired by Unilever in 2026, about 30 months after launch",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://gruns.co",
+    "watch": {
+      "secCik": "217410"
+    }
+  },
+  {
+    "id": "loop",
+    "aiRole": "None",
+    "caveats": "Self-reported to Adweek. Headcount and retention unknown, so efficiency scores 0.",
+    "confidence": 2,
+    "customer": "B2B",
+    "digital": "Digitally enabled",
+    "evidence": [
+      {
+        "metric": "Net revenue",
+        "period": "2025–26",
+        "selfReported": true,
+        "source": "Adweek",
+        "tier": "Company-reported",
+        "type": "Revenue",
+        "url": "https://www.adweek.com/fastest-growing-agencies/2026/",
+        "value": "$13.5M"
+      }
+    ],
+    "flags": [],
+    "form": "Service",
+    "launched": "2025 growth spurt",
+    "model": "Retainer/project fees",
+    "name": "Loop",
+    "profitability": "Not publicly verified.",
+    "recheck": "Next agency ranking or headcount data",
+    "scores": {
+      "durability": 2,
+      "efficiency": 0,
+      "growth": 4,
+      "profit": 1,
+      "scale": 3
+    },
+    "summary": "Creative studio that won 30 new clients since 2025, including Anthropic, Hinge, and Duolingo, reaching $13.5M net revenue.",
+    "trigger": "Adweek Fastest Growing Agencies 2026",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://www.loop.co",
+    "icon": "/icons/loop.jpg"
+  },
+  {
+    "id": "lovable",
+    "aiRole": "Native",
+    "caveats": "Run-rate figures, not audited revenue. Inference costs and churn unknown.",
+    "confidence": 2,
+    "customer": "Prosumer",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "ARR",
+        "period": "Feb 2026",
+        "selfReported": true,
+        "source": "TechCrunch",
+        "tier": "Company-reported",
+        "type": "ARR",
+        "url": "https://techcrunch.com/2026/03/11/lovable-says-it-added-100m-in-revenue-last-month-alone-with-just-146-employees/",
+        "value": "$400M"
+      },
+      {
+        "metric": "Annualized run rate",
+        "period": "June 2026",
+        "selfReported": true,
+        "source": "The Next Web",
+        "tier": "Company-reported",
+        "type": "Annualized run-rate",
+        "url": "https://thenextweb.com/news/lovable-build-economy-500m-arr-vibe-coding",
+        "value": "$500M"
+      }
+    ],
+    "flags": [
+      "Metric-type risk"
+    ],
+    "form": "Web app/site",
+    "launched": "Nov 2024",
+    "model": "Subscription",
+    "name": "Lovable",
+    "profitability": "Not publicly verified.",
+    "recheck": "Next ARR disclosure or funding round",
+    "scores": {
+      "durability": 3,
+      "efficiency": 3,
+      "growth": 5,
+      "profit": 1,
+      "scale": 4
+    },
+    "summary": "Vibe-coding app builder with extreme revenue per employee. $400M ARR confirmed to TechCrunch in Feb 2026; $500M claimed in June.",
+    "trigger": "$500M ARR claimed within ~19 months of launch",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://lovable.dev"
+  },
+  {
+    "id": "oura",
+    "aiRole": "Feature",
+    "caveats": "All figures company-reported; 2026 ~$2B is a CEO forecast.",
+    "confidence": 2,
+    "customer": "B2C",
+    "digital": "Digital-led",
+    "evidence": [
+      {
+        "metric": "Revenue",
+        "period": "FY2024",
+        "selfReported": true,
+        "source": "Oura press release",
+        "tier": "Company-reported",
+        "type": "Revenue",
+        "url": "https://www.businesswire.com/news/home/20250922351288/en/URA-Surpasses-5.5-Million-Rings-Sold-and-Doubles-Revenue-for-the-Second-Year-in-a-Row-Empowering-Millions-to-Live-Better-Longer",
+        "value": ">$500M"
+      },
+      {
+        "metric": "IPO filing",
+        "period": "2026",
+        "selfReported": false,
+        "source": "Fierce Healthcare",
+        "tier": "Reputable press",
+        "type": "Revenue",
+        "url": "https://www.fiercehealthcare.com/health-tech/oura-smart-ring-maker-files-confidentially-ipo-consumer-demand-propels-revenue-growth",
+        "value": "Confidential"
+      }
+    ],
+    "flags": [
+      "Pending disclosure"
+    ],
+    "form": "Hardware + software",
+    "launched": "2015 (doubling since 2024)",
+    "model": "One-time + subscription",
+    "name": "Oura",
+    "profitability": "Company-claimed (\"continuing to expand profitability\"); not publicly verified.",
+    "recheck": "Public S-1 filing",
+    "scores": {
+      "durability": 4,
+      "efficiency": 2,
+      "growth": 5,
+      "profit": 3,
+      "scale": 5
+    },
+    "summary": "Smart ring with subscription layer. Company-reported revenue over $500M in 2024, on track for $1B in 2025.",
+    "trigger": "Revenue doubled two years running; confidential IPO filing",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://ouraring.com"
+  },
+  {
+    "id": "pop-mart",
+    "aiRole": "None",
+    "caveats": "Overseas revenue fell 11.1% in H1 2026; CEO says the 20% full-year growth target is unlikely.",
+    "confidence": 5,
+    "customer": "B2C",
+    "digital": "Digitally distributed",
+    "evidence": [
+      {
+        "metric": "Revenue",
+        "period": "FY2025",
+        "selfReported": false,
+        "source": "HKEX annual results",
+        "tier": "Audited filing",
+        "type": "Revenue",
+        "url": "https://www1.hkexnews.hk/listedco/listconews/sehk/2026/0325/2026032500285.pdf",
+        "value": "RMB 37.12B"
+      },
+      {
+        "metric": "Revenue",
+        "period": "H1 2026",
+        "selfReported": false,
+        "source": "Pop Mart H1 2026 release",
+        "tier": "Company financial statements",
+        "type": "Revenue",
+        "url": "https://finance.yahoo.com/markets/stocks/articles/pop-mart-reports-first-half-114000738.html",
+        "value": "RMB 17.17B"
+      }
+    ],
+    "flags": [
+      "Hit-dependent",
+      "Decelerating"
+    ],
+    "form": "Physical product",
+    "launched": "2010 (Labubu breakout 2024–25)",
+    "model": "One-time purchase",
+    "name": "Pop Mart",
+    "profitability": "Verified: 2025 non-IFRS adjusted net profit RMB 13.08B; H1 2026 RMB 5.16B.",
+    "recheck": "FY2026 results (March 2027)",
+    "scores": {
+      "durability": 2,
+      "efficiency": 4,
+      "growth": 3,
+      "profit": 5,
+      "scale": 5
+    },
+    "summary": "Collectible toy maker with audited hit-driven growth. H1 2026 revenue RMB 17.17B, up 23.8%, after 2025's 184.7%.",
+    "trigger": "Labubu drove 2025 revenue up 185%; growth now decelerating sharply",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://www.popmart.com"
+  },
+  {
+    "id": "schedule-i",
+    "aiRole": "None",
+    "caveats": "Estimate, not reported revenue; gross before Valve's cut. One-off hit with no recurring revenue.",
+    "confidence": 2,
+    "customer": "B2C",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "Steam revenue (est.)",
+        "period": "2025",
+        "selfReported": false,
+        "source": "Alinea Analytics via VoxBooster",
+        "tier": "Third-party analytics",
+        "type": "Third-party estimate",
+        "url": "https://voxbooster.com/blog/indie-game-statistics-2026/",
+        "value": "$151M"
+      }
+    ],
+    "flags": [
+      "Hit-dependent"
+    ],
+    "form": "Game",
+    "launched": "2025",
+    "model": "One-time purchase",
+    "name": "Schedule I",
+    "profitability": "Not publicly verified.",
+    "recheck": "Developer sales announcements; Steam review trend",
+    "scores": {
+      "durability": 2,
+      "efficiency": 5,
+      "growth": 5,
+      "profit": 1,
+      "scale": 4
+    },
+    "summary": "Small-team PC game; third-party estimate of $151M Steam revenue in 2025.",
+    "trigger": "2025's top-earning new indie game on Steam",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://store.steampowered.com/app/3164500/Schedule_I/",
+    "watch": {
+      "steamAppId": "3164500"
+    }
+  },
+  {
+    "id": "the-free-press",
+    "aiRole": "None",
+    "caveats": "Price reported (~$150M), not disclosed; revenue is a Sacra estimate.",
+    "confidence": 2,
+    "customer": "B2C",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "Annualized revenue (est.)",
+        "period": "Sept 2025",
+        "selfReported": false,
+        "source": "Sacra",
+        "tier": "Third-party analytics",
+        "type": "Third-party estimate",
+        "url": "https://sacra.com/c/the-free-press/",
+        "value": "~$20M"
+      },
+      {
+        "metric": "Acquisition price",
+        "period": "Oct 2025",
+        "selfReported": false,
+        "source": "Press Gazette",
+        "tier": "Reputable press",
+        "type": "Acquisition price",
+        "url": "https://pressgazette.co.uk/newsletters/the-free-press-goes-from-zero-to-150m-valuation-in-five-years-on-substack/",
+        "value": "~$150M (reported)"
+      }
+    ],
+    "flags": [],
+    "form": "Content/media",
+    "launched": "2021",
+    "model": "Subscription",
+    "name": "The Free Press",
+    "profitability": "Not publicly verified.",
+    "recheck": "Paramount segment reporting",
+    "scores": {
+      "durability": 3,
+      "efficiency": 4,
+      "growth": 4,
+      "profit": 1,
+      "scale": 3
+    },
+    "summary": "Subscription media business built on Substack. Paramount disclosed 82% revenue growth; revenue estimated around $20M.",
+    "trigger": "Acquired by Paramount Skydance (Oct 2025)",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://www.thefp.com"
+  },
+  {
+    "id": "vinted",
+    "aiRole": "None",
+    "caveats": "Private; figures unaudited publicly. Logistics and payments buildout compressing margins.",
+    "confidence": 3,
+    "customer": "C2C/marketplace",
+    "digital": "Fully digital",
+    "evidence": [
+      {
+        "metric": "Revenue",
+        "period": "FY2025",
+        "selfReported": true,
+        "source": "Vinted 2025 results",
+        "tier": "Company financial statements",
+        "type": "Revenue",
+        "url": "https://ethicalmarketingnews.com/vinted-generates-e1-1bn-in-annual-revenue-as-it-brings-second-hand-goods-to-more-people-in-2025",
+        "value": "€1.1B"
+      },
+      {
+        "metric": "GMV",
+        "period": "FY2025",
+        "selfReported": true,
+        "source": "Vinted 2025 results",
+        "tier": "Company financial statements",
+        "type": "GMV",
+        "url": "https://ethicalmarketingnews.com/vinted-generates-e1-1bn-in-annual-revenue-as-it-brings-second-hand-goods-to-more-people-in-2025",
+        "value": "€10.8B"
+      }
+    ],
+    "flags": [],
+    "form": "Marketplace/platform",
+    "launched": "2008 (profitable since 2023)",
+    "model": "Take rate",
+    "name": "Vinted",
+    "profitability": "Company-reported 2025 net profit €62M (down 19%); free cash flow €137M.",
+    "recheck": "FY2026 annual results (April 2027)",
+    "scores": {
+      "durability": 5,
+      "efficiency": 4,
+      "growth": 3,
+      "profit": 4,
+      "scale": 5
+    },
+    "summary": "Secondhand marketplace growing GMV 47% while staying profitable. Clear separation of GMV and revenue in disclosures.",
+    "trigger": "Third straight profitable year at €1.1B revenue; US launch Jan 2026",
+    "updatedAt": "2026-10-02T00:00:00Z",
+    "website": "https://www.vinted.com"
+  }
+]
