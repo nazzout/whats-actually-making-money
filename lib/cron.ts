@@ -146,7 +146,8 @@ async function pollRss(companyId: string, feed: string) {
     const guid = (b.match(/<(guid|id)[^>]*>([\s\S]*?)<\/(guid|id)>/i)?.[2] || link || title).trim();
     return { title, link, guid };
   });
-  const metaKey = `rss:${feed}`;
+  // The feed URL becomes part of a Firestore document id, which cannot contain "/".
+  const metaKey = `rss:${encodeURIComponent(feed)}`;
   const seen = new Set(await getMeta<string[]>(metaKey, []));
   const first = seen.size === 0;
   let opened = 0;

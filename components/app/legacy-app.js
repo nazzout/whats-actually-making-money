@@ -470,6 +470,27 @@ $("#scrim").addEventListener("click",closeSheet);
 addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#sheet").classList.contains("on"))closeSheet()});
 
 const TRUST_WORD=["No revenue evidence","Founder post or single source","Company claim or estimate","Company results or reputable press","Regulatory or acquirer filing","Audited filing"];
+
+/* ---------- evidence freshness ----------
+   STALE_DAYS matches lib/rechecks.ts, so what the public sees lines up with what agents are asked to re-check. */
+const STALE_DAYS=90;
+const daysSince=iso=>{const t=Date.parse(iso||"");return Number.isFinite(t)?Math.floor((Date.now()-t)/864e5):null};
+const agoWord=d=>d<=0?"today":d===1?"yesterday":d<30?`${d} days ago`:d<60?"a month ago":d<365?`${Math.round(d/30)} months ago`:d<730?"over a year ago":"over 2 years ago";
+// When an entry was last confirmed against its source. Never-checked and past-threshold both read as a warning.
+function ageHTML(e){
+  const d=daysSince(e.lastCheckedAt);
+  if(d===null)return `<span class="age warn" title="Added but never re-checked against the source.">Never re-checked</span>`;
+  if(e.lastCheckStatus==="needs review")return `<span class="age warn" title="The last re-check could not confirm this figure.">Unconfirmed, checked ${esc(agoWord(d))}</span>`;
+  if(d>STALE_DAYS)return `<span class="age warn" title="Older than the ${STALE_DAYS}-day re-check window.">Last checked ${esc(agoWord(d))}</span>`;
+  return `<span class="age">Verified ${esc(agoWord(d))}</span>`;
+}
+// A figure for a period before the current year may have been superseded by a newer release.
+const periodYear=p=>{const m=String(p||"").match(/(19|20)\d{2}/g);return m?Math.max(...m.map(Number)):null};
+function periodHTML(e){
+  const y=periodYear(e.period);
+  if(!y||y>=new Date().getFullYear())return "";
+  return `<span class="tag soft" title="This figure covers ${y}. A more recent period may now be published.">Newer period may exist</span>`;
+}
 const strengthWord=v=>v>=20?"Very strong":v>=15?"Strong":v>=12?"Moderate":"Too early to call";
 function profitState(d){const p=d.profitability||"";return /^verified/i.test(p)?"verified":/claim|company-reported|self-reported/i.test(p)?"claimed":"none"}
 const PROFIT_HEAD={verified:"Profit verified",claimed:"Profit claimed, not verified",none:"Profit not verified"};
@@ -477,7 +498,7 @@ function openDetail(id){
   const d=items.find(i=>i.id===id);if(!d)return;
   const e=(d.evidence||[])[0]||{},ps=profitState(d),sc=d.scores||{};
   const bar=(label,v,max,word)=>`<div class="vrow"><span class="vl">${label}</span><div class="vtrack"><span style="width:${v/max*100}%"></span></div><span class="vw"><b>${v}/${max}</b>${word?" "+esc(word):""}</span></div>`;
-  const ev=(d.evidence||[]).map(x=>{const u=safeUrl(x.url);return `<li><div class="ev-v"><b>${esc(x.value)}</b><span>${esc(x.metric)}${x.period?", "+esc(x.period):""}</span></div><div class="ev-s"><span>${esc(x.tier)}</span>${x.selfReported?'<span class="tag">Self-reported</span>':""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.source||"Source")} ↗</a>`:(x.source?`<span>${esc(x.source)}</span>`:"")}</div></li>`}).join("");
+  const ev=(d.evidence||[]).map(x=>{const u=safeUrl(x.url);return `<li><div class="ev-v"><b>${esc(x.value)}</b><span>${esc(x.metric)}${x.period?", "+esc(x.period):""}</span>${periodHTML(x)}</div><div class="ev-s"><span>${esc(x.tier)}</span>${x.selfReported?'<span class="tag">Self-reported</span>':""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.source||"Source")} ↗</a>`:(x.source?`<span>${esc(x.source)}</span>`:"")}${ageHTML(x)}</div></li>`}).join("");
   const fact=(k,v)=>v?`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`:"";
   openSheet(`<div class="dh"><div class="dh-id">${icoHTML(d,"ico")}<div><h3>${esc(d.name)}</h3><p class="dh-sub">${esc(d.form||"")}${d.customer?" · "+esc(d.customer):""} · <span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></p></div></div><div class="dh-act">${safeUrl(d.website)?`<a class="btn visit" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">Visit site <span aria-hidden="true">↗</span></a>`:""}<button class="xbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div></div>
   <section class="verdict">
