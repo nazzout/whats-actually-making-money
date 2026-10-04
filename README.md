@@ -1,4 +1,4 @@
-# What's actually making money?
+# What makes money?
 
 A public research resource that tracks recently launched or recently scaled businesses with credible evidence that people are paying. Each company is scored two ways: how much we can trust the numbers, and how strong the business looks. The full brief is in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 

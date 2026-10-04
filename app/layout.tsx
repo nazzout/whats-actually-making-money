@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "What's actually making money?",
+  title: "What makes money?",
   description:
     "Recently launched and recently scaled businesses with credible evidence that people are paying, scored on how much the numbers can be trusted and how strong the business looks.",
 };

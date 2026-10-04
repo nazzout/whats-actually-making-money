@@ -2,7 +2,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<{ 
   const sp = await searchParams;
   return (
     <div className="login">
-      <a className="a-brand" href="/">What&apos;s actually making money?</a>
+      <a className="a-brand" href="/">What makes money?</a>
       <h1 style={{ marginTop: 28 }}>Owner sign in</h1>
       <p className="a-sub">Sign in to review agent proposals and edit companies.</p>
       <form method="post" action="/api/admin/login">
