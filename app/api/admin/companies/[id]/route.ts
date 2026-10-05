@@ -12,8 +12,11 @@ export async function PUT(req: Request, ctx: Ctx) {
     const body = (await req.json()) as Record<string, unknown>;
     const { reason, ...data } = body;
     const existing = await getCompany(id);
+    // A null value means "clear this optional field" (JSON cannot send undefined).
+    const merged: Record<string, unknown> = { ...(existing || {}), ...data, id };
+    for (const [k, v] of Object.entries(merged)) if (v === null) delete merged[k];
     const { company } = await saveCompany(
-      { ...(existing || {}), ...data, id },
+      merged,
       { actor: "owner", reason: typeof reason === "string" && reason ? reason : existing ? "Edited in the app" : "Added in the app" },
     );
     return Response.json({ company: publicCompany(company) });

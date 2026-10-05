@@ -539,6 +539,9 @@ function openDetail(id){
   sh.querySelector("[data-del]")?.addEventListener("click",async ev2=>{const t=ev2.target;if(t.dataset.c!=="1"){t.dataset.c="1";t.textContent="Click again to delete";return}try{await db.collection("companies").doc(d.id).delete();closeSheet()}catch{t.textContent="Couldn't delete. Try again."}});
 }
 const sel=(n,o,v)=>`<select name="${n}">${o.map(x=>`<option ${String(x)===String(v)?"selected":""}>${esc(x)}</option>`).join("")}</select>`;
+// Same as sel, with a "Not set" first option for optional fields.
+const selOpt=(n,o,v)=>`<select name="${n}"><option value="" ${v?"":"selected"}>Not set</option>${o.map(x=>`<option ${String(x)===String(v)?"selected":""}>${esc(x)}</option>`).join("")}</select>`;
+const ECO=["End product","Platform","Enabling tool","Infrastructure","Marketplace","Service layer"];
 const evRow=(e={})=>`<div class="evrow"><input name="ev_metric" placeholder="Metric" value="${esc(e.metric)}" aria-label="Metric"><input name="ev_value" placeholder="Value" value="${esc(e.value)}" aria-label="Value"><input name="ev_period" placeholder="Period" value="${esc(e.period)}" aria-label="Period">${sel("ev_type",OPT.metricType,e.type||"Revenue")}${sel("ev_tier",OPT.tier,e.tier||"Reputable press")}<input name="ev_source" placeholder="Source name" value="${esc(e.source)}" aria-label="Source name"><input name="ev_url" placeholder="https://" value="${esc(e.url)}" aria-label="Source link" style="grid-column:1/-1"><label style="display:flex;gap:6px;align-items:center;color:var(--ink);font-size:13px"><input type="checkbox" name="ev_self" ${e.selfReported?"checked":""} style="width:auto"> Self-reported</label><button type="button" class="x">Remove row</button></div>`;
 function openForm(d){
   const isNew=!d;d=d||{scores:{},flags:[],evidence:[{}],confidence:2};const s=d.scores||{};
@@ -548,6 +551,9 @@ function openForm(d){
     <label>Product form${sel("form",OPT.form,d.form)}</label><label>Customer${sel("customer",OPT.customer,d.customer)}</label>
     <label>Revenue model${sel("model",OPT.model,d.model)}</label><label>Digital intensity${sel("digital",OPT.digital,d.digital)}</label>
     <label>AI role${sel("aiRole",OPT.aiRole,d.aiRole||"None")}</label><label>Launched or broke out<input name="launched" value="${esc(d.launched)}"></label>
+    <label>Industry${selOpt("industry",OPT.industry,d.industry)}</label><label>Ecosystem role${selOpt("ecosystemRole",ECO,d.ecosystemRole)}</label>
+    <label>Tracked as${sel("entityType",["company","product"],d.entityType||"company")}</label><label>Parent company (products only)<input name="parentCompany" value="${esc(d.parentCompany)}" placeholder="e.g. Anthropic"></label>
+    <label class="full">Tags (comma separated; matching existing tags are reused)<input name="tags" value="${esc((d.tags||[]).join(", "))}" placeholder="e.g. Subscription, Prosumer"></label>
     <label class="full">Website<input name="website" type="url" inputmode="url" placeholder="https://" value="${esc(d.website)}"></label>
     <label class="full">Why it qualifies now<input name="trigger" value="${esc(d.trigger)}"></label></div>
     <fieldset><legend>Scores</legend><div class="dimgrid"><label>Trust in the numbers${sel("confidence",[0,1,2,3,4,5],d.confidence)}</label>${DIMS.map(([k,l])=>`<label>${l}${sel("s_"+k,[0,1,2,3,4,5],num(s[k]))}</label>`).join("")}</div><div class="live" id="live"></div></fieldset>
@@ -569,7 +575,10 @@ function openForm(d){
 }
 function collect(f){const fd=new FormData(f),g=k=>(fd.get(k)||"").toString().trim();
   const ev=[...f.querySelectorAll(".evrow")].map(r=>({metric:r.querySelector("[name=ev_metric]").value.trim(),value:r.querySelector("[name=ev_value]").value.trim(),period:r.querySelector("[name=ev_period]").value.trim(),type:r.querySelector("[name=ev_type]").value,tier:r.querySelector("[name=ev_tier]").value,source:r.querySelector("[name=ev_source]").value.trim(),url:r.querySelector("[name=ev_url]").value.trim(),selfReported:r.querySelector("[name=ev_self]").checked})).filter(e=>e.metric||e.value);
-  return {name:g("name"),form:g("form"),customer:g("customer"),model:g("model"),digital:g("digital"),aiRole:g("aiRole"),launched:g("launched"),website:/^https?:\/\//i.test(g("website"))?g("website"):(g("website")?"https://"+g("website"):""),trigger:g("trigger"),confidence:Number(g("confidence")),scores:Object.fromEntries(DIMS.map(([k])=>[k,Number(g("s_"+k))])),profitability:g("profitability")||"Not publicly verified.",summary:g("summary"),caveats:g("caveats"),recheck:g("recheck"),flags:fd.getAll("flag").map(String),evidence:ev}}
+  // Optional classification fields: null means "clear it" (the server drops null keys).
+  const entityType=g("entityType")||"company";
+  const cls={industry:g("industry")||null,ecosystemRole:g("ecosystemRole")||null,entityType,parentCompany:entityType==="product"&&g("parentCompany")?g("parentCompany"):null,tags:g("tags").split(",").map(t=>t.trim()).filter(Boolean)};
+  return {...cls,name:g("name"),form:g("form"),customer:g("customer"),model:g("model"),digital:g("digital"),aiRole:g("aiRole"),launched:g("launched"),website:/^https?:\/\//i.test(g("website"))?g("website"):(g("website")?"https://"+g("website"):""),trigger:g("trigger"),confidence:Number(g("confidence")),scores:Object.fromEntries(DIMS.map(([k])=>[k,Number(g("s_"+k))])),profitability:g("profitability")||"Not publicly verified.",summary:g("summary"),caveats:g("caveats"),recheck:g("recheck"),flags:fd.getAll("flag").map(String),evidence:ev}}
 $("#addBtn").addEventListener("click",()=>openForm(null));
 
 /* ---------- boot (Vercel version) ---------- */
