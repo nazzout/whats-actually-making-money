@@ -44,6 +44,16 @@ const RecheckPayload = z.object({
   patch: CompanyPatchSchema.optional(),
 });
 
+/**
+ * Keep only the fields the sender actually provided.
+ * CompanyPatchSchema is a partial of CompanySchema, but zod still fills .default() fields (summary "", evidence [],
+ * flags [] ...) for keys that were never sent. Spreading that over the stored record silently wiped data.
+ */
+function onlyProvided<T extends Record<string, unknown>>(parsed: T, raw: unknown): Partial<T> {
+  const sent = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  return Object.fromEntries(Object.entries(parsed).filter(([k]) => Object.prototype.hasOwnProperty.call(sent, k))) as Partial<T>;
+}
+
 const evKey = (e: Evidence) => `${e.url}|${e.metric}|${e.period}`;
 const score = (c: Company) => {
   const d = derive(c);
@@ -78,7 +88,7 @@ export async function buildCandidate(p: ProposalInputT) {
   const now = new Date().toISOString();
 
   if (p.kind === "update") {
-    const patch = CompanyPatchSchema.parse(payload);
+    const patch = onlyProvided(CompanyPatchSchema.parse(payload), payload);
     const after = CompanySchema.parse({ ...before, ...patch, id });
     const old = new Set(before.evidence.map((e) => stable(e)));
     const changed = after.evidence.map((e, i) => (old.has(stable(e)) ? -1 : i)).filter((i) => i >= 0);
@@ -103,7 +113,9 @@ export async function buildCandidate(p: ProposalInputT) {
   const known = new Set(before.evidence.map(evKey));
   const added = r.evidence.filter((e) => !known.has(evKey(e)));
   list = [...list, ...added];
-  const after = CompanySchema.parse({ ...before, ...(r.patch || {}), evidence: r.patch?.evidence || list, id });
+  // Same rule for a re-check patch: an omitted evidence field must not become an empty list.
+  const patch = r.patch ? onlyProvided(r.patch, (payload as { patch?: unknown }).patch) : {};
+  const after = CompanySchema.parse({ ...before, ...patch, evidence: patch.evidence || list, id });
   const changed = added.map((_, i) => before.evidence.length + i);
   return { id, before, after, changed };
 }
