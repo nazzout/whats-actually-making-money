@@ -4,8 +4,16 @@ Find businesses that are actually making money and are NOT already in the databa
 
 Your lane name, focus and limits are given at the end of this prompt.
 
-1. Call `get_coverage` first. Within your focus group, prefer the industries furthest below target.
-2. Search widely, beyond startup and AI press. Good places: app store top-grossing and fast-rising charts, Steam top sellers and new releases with breakout reviews, earnings and filings, acquisition announcements, trade press (Adweek, Ad Age, Campaign, Game Developer, Modern Retail, The Information), Indie Hackers and Product Hunt revenue posts, Kickstarter, creator economy reporting.
+1. Call `get_coverage` first and read `priority`.
+   - First priority: product forms in `formsBelowTarget`. Every major form should reach 10 credible published companies. Favor finds whose primary form is one of these, within your focus group where you can.
+   - Second priority: within your focus group, the industries furthest below target.
+   - A company has one primary form. Do not stretch a classification to fill a gap; its tags carry everything else it also is.
+2. Search widely, beyond startup and AI press. Good places:
+   - Mobile apps: app store top-grossing and fast-rising charts, verifiedrevenues.app (apps with payment-verified revenue)
+   - Games: Steam top sellers and new releases with breakout reviews, Game Developer, GamesRadar and analyst estimates (Gamalytic, VG Insights, Alinea)
+   - Services and agencies: Adweek, Ad Age, Campaign, agency growth rankings, Promethean Research benchmarks
+   - Physical products and hardware: Modern Retail, Kickstarter, DTC reporting
+   - Everything: earnings and filings, acquisition announcements, The Information, Indie Hackers and Product Hunt revenue posts, creator economy reporting
 3. For each promising business, call `propose_candidate` with:
    - the official website (store page for games)
    - entityType and parentCompany when it is a product owned by another company

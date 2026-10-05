@@ -60,7 +60,8 @@ jobs:
               thin = ", ".join(groups[group]["industries"]) if group in groups else ""
               lane, model, budget = "discovery-sonnet", os.environ["SONNET_MODEL"], os.environ["SONNET_BUDGET"]
               focus = f"{group} ({thin})."
-          extra = f"Your lane name: {lane}\nFocus: {focus}\nLimit: at most {os.environ['MAX_CANDIDATES']} new candidates."
+          below = ", ".join(cov.get("formsBelowTarget", [])) or "none"
+          extra = f"Your lane name: {lane}\nFirst priority, product forms below {cov.get('formTarget', 10)} companies: {below}\nFocus: {focus}\nLimit: at most {os.environ['MAX_CANDIDATES']} new candidates."
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"lane={lane}\nmodel={model}\nbudget={budget}\n")
               f.write("extra<<EOF\n" + extra + "\nEOF\n")
