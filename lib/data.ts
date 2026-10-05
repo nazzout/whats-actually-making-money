@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { getStore } from "./store";
 import { CompanySchema, stripComputed, type Company } from "./schema";
+import { canonicalTags } from "./tags";
 
 export type Actor = { actor: string; reason: string; source?: string; proposalId?: string };
 export type ChangeEntry = {
@@ -79,9 +80,17 @@ async function log(companyId: string, changes: { field: string; before: unknown;
   }
 }
 
+/** Reuse existing tag spellings so agents and edits don't create near-duplicates ("Creator tools" vs "Creators"). */
+export async function withCanonicalTags<T extends Record<string, unknown>>(rec: T, selfId?: string): Promise<T> {
+  if (rec.tags == null) return rec;
+  const others = (await listCompanies()).filter((c) => c.id !== selfId).flatMap((c) => c.tags || []);
+  return { ...rec, tags: canonicalTags(rec.tags, others) };
+}
+
 /** Validate, write and log a full company record. Returns the changed fields. */
 export async function saveCompany(input: unknown, who: Actor) {
-  const parsed = CompanySchema.parse(stripComputed((input || {}) as Record<string, unknown>));
+  const raw = stripComputed((input || {}) as Record<string, unknown>);
+  const parsed = CompanySchema.parse(await withCanonicalTags(raw, typeof raw.id === "string" ? raw.id : undefined));
   const store = await getStore();
   const before = await getCompany(parsed.id);
   const after: Company = { ...parsed, updatedAt: new Date().toISOString() };

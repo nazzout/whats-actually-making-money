@@ -5,6 +5,8 @@ export default function AdminTop() {
       <nav className="a-nav" aria-label="Owner">
         <a href="/#board">Board</a>
         <a href="/admin/review">Review queue</a>
+        <a href="/admin/candidates">Candidates</a>
+        <a href="/admin/costs">Costs</a>
         <a href="/admin/log">Change log</a>
         <form method="post" action="/api/admin/logout">
           <button type="submit">Sign out</button>

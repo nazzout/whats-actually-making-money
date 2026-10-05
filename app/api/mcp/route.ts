@@ -6,6 +6,8 @@ import { getCompany, listChangeLog, listCompanies } from "@/lib/data";
 import { publicCompany } from "@/lib/public";
 import { finishProposal, getProposal, submitProposal, type ProposalInputT } from "@/lib/proposals";
 import { dueRechecks } from "@/lib/rechecks";
+import { CANDIDATE_STATUSES, listCandidates, proposeCandidate, setCandidateStatus } from "@/lib/candidates";
+import { coverage } from "@/lib/coverage";
 
 export const maxDuration = 60;
 
@@ -54,9 +56,13 @@ const handler = createMcpHandler(
       {
         title: "Propose a new company",
         description: `Submit a new company (full JSON per HANDOFF.md section 6, website required). ${RULES}`,
-        inputSchema: z.object({ company: z.record(z.string(), z.unknown()), ...common }),
+        inputSchema: z.object({
+          company: z.record(z.string(), z.unknown()),
+          candidateId: z.string().optional().describe("The candidate this company was researched from, if any. Links discovery provenance and moves the candidate along."),
+          ...common,
+        }),
       },
-      async ({ company, reason, sourceUrls, proposedBy }) => propose({ kind: "new_company", payload: company, reason, sourceUrls, proposedBy }),
+      async ({ company, candidateId, reason, sourceUrls, proposedBy }) => propose({ kind: "new_company", payload: company, candidateId, reason, sourceUrls, proposedBy }),
     );
     server.registerTool(
       "propose_update",
@@ -99,6 +105,64 @@ const handler = createMcpHandler(
       "list_due_rechecks",
       { title: "List due re-checks", description: "Companies that need a re-check, with reasons and open tasks from the daily cron jobs.", inputSchema: z.object({}) },
       async () => text(await dueRechecks()),
+    );
+    server.registerTool(
+      "get_coverage",
+      {
+        title: "Get coverage",
+        description:
+          "Industry coverage against the target (the primary signal for discovery), rotation groups ordered thinnest first, other dimensions as diagnostics only, and every tag in use. Call before discovery, and reuse existing tags instead of inventing near-duplicates. Never add a weak company to fill a gap.",
+        inputSchema: z.object({}),
+      },
+      async () => text(await coverage()),
+    );
+    server.registerTool(
+      "propose_candidate",
+      {
+        title: "Propose a candidate",
+        description:
+          "Add a business to the research inbox. Not published. Duplicates by name or website are refused with the existing ids. Use entityType 'product' with parentCompany for a product owned by another company.",
+        inputSchema: z.object({
+          name: z.string(),
+          website: z.string().url().optional(),
+          entityType: z.enum(["company", "product"]).default("company"),
+          parentCompany: z.string().optional(),
+          industry: z.string().optional(),
+          whyInteresting: z.string().min(3).describe("One or two plain sentences: what signal suggests it may be making money"),
+          trendNotes: z.string().default(""),
+          source: z.string().describe("Where you found it, e.g. 'App Store top grossing' or a publication name"),
+          sourceUrl: z.string().url().optional(),
+          lane: z.string().describe("Your lane name, e.g. 'discovery-sonnet'"),
+        }),
+      },
+      async ({ source, sourceUrl, lane, ...rest }) => {
+        try {
+          const r = await proposeCandidate({ ...rest, discoveredFrom: { source, url: sourceUrl, lane } });
+          return r.created ? text({ created: true, candidate: r.candidate }) : { ...text({ created: false, duplicates: r.duplicates }), isError: true };
+        } catch (e) {
+          return { ...text(e instanceof z.ZodError ? z.prettifyError(e) : e instanceof Error ? e.message : "Error"), isError: true };
+        }
+      },
+    );
+    server.registerTool(
+      "list_candidates",
+      { title: "List candidates", description: "Candidates in the research inbox, optionally by status.", inputSchema: z.object({ status: z.enum(CANDIDATE_STATUSES).optional() }) },
+      async ({ status }) => text(await listCandidates(status)),
+    );
+    server.registerTool(
+      "update_candidate_status",
+      {
+        title: "Update candidate status",
+        description: "Move a candidate to qualifying, research_needed, qualified, rejected or watch_later, with a short note. 'proposed' and 'published' are set automatically.",
+        inputSchema: z.object({ id: z.string(), status: z.enum(CANDIDATE_STATUSES), note: z.string().default(""), by: z.string().default("mcp-agent") }),
+      },
+      async ({ id, status, note, by }) => {
+        try {
+          return text(await setCandidateStatus(id, status, by, note));
+        } catch (e) {
+          return { ...text(e instanceof Error ? e.message : "Error"), isError: true };
+        }
+      },
     );
     server.registerTool(
       "get_proposal",

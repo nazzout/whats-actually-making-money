@@ -79,6 +79,7 @@ export async function POST(req: Request) {
     id: d.id, name: d.name, form: d.form, customer: d.customer, model: d.model, digital: d.digital, aiRole: d.aiRole,
     trust: d.confidence, strength: d.strength, signal: d.signal, included: d.included,
     profitability: d.profitability, flags: d.flags, summary: d.summary,
+    industry: d.industry, ecosystemRole: d.ecosystemRole, tags: d.tags, entityType: d.entityType, parentCompany: d.parentCompany,
     evidence: d.evidence.slice(0, 4).map((e) => ({ metric: e.metric, value: e.value, period: e.period, type: e.type, tier: e.tier, selfReported: e.selfReported })),
   }));
 

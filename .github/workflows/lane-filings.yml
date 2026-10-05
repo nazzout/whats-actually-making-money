@@ -60,6 +60,8 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
           IDS: ${{ steps.queue.outputs.ids }}
+          LANE: recheck
+          AGENT_NAME: filings-agent
         run: |
           chmod +x scripts/agent-run.sh
           scripts/agent-run.sh agents/lane-filings.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl \

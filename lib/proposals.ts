@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { getStore } from "./store";
-import { diffCompany, getCompany, newId, saveCompany, stable } from "./data";
+import { diffCompany, getCompany, newId, saveCompany, stable, withCanonicalTags } from "./data";
 import { CompanyPatchSchema, CompanySchema, EvidenceSchema, slugify, stripComputed, type Company, type Evidence } from "./schema";
 import { derive } from "./rubric";
+import { getCandidate, setCandidateStatus } from "./candidates";
 import { companyRules, conflictCheck, evidenceRules, sourceChecks, type CheckResult } from "./validators";
 
 export const KINDS = ["new_company", "update", "add_evidence", "recheck_result"] as const;
@@ -16,6 +17,8 @@ export const ProposalInput = z.object({
   reason: z.string().trim().min(3, "Give a short reason"),
   sourceUrls: z.array(z.string().url()).default([]),
   proposedBy: z.string().trim().max(80).default("agent"),
+  // Set when a new_company proposal comes out of the candidates pipeline.
+  candidateId: z.string().trim().max(80).optional(),
 });
 export type ProposalInputT = z.infer<typeof ProposalInput>;
 
@@ -49,12 +52,24 @@ const score = (c: Company) => {
 
 /** Build the full candidate record a proposal would produce, plus which evidence rows are new or changed. */
 export async function buildCandidate(p: ProposalInputT) {
-  const payload = stripComputed(p.payload);
+  // Canonical tags first, so the diff and validators see the spelling that would actually be saved.
+  const payload = await withCanonicalTags(stripComputed(p.payload), p.companyId);
   if (p.kind === "new_company") {
     const id = (payload.id as string) || slugify(String(payload.name || ""));
     const before = await getCompany(id);
     if (before) throw new Error(`A company with id "${id}" already exists. Use kind "update".`);
-    const after = CompanySchema.parse({ ...payload, id });
+    // A company researched from a candidate inherits where it was discovered, unless the payload says otherwise.
+    const cand = p.candidateId ? await getCandidate(p.candidateId) : null;
+    if (p.candidateId && !cand) throw new Error(`No candidate with id "${p.candidateId}".`);
+    const fromCandidate = cand
+      ? {
+          discoveredFrom: { ...cand.discoveredFrom, candidateId: cand.id },
+          discoveredAt: cand.discoveredAt,
+          entityType: cand.entityType,
+          ...(cand.parentCompany ? { parentCompany: cand.parentCompany } : {}),
+        }
+      : {};
+    const after = CompanySchema.parse({ ...fromCandidate, ...payload, id });
     return { id, before: null, after, changed: after.evidence.map((_, i) => i) };
   }
   const id = p.companyId || "";
@@ -143,6 +158,9 @@ export async function submitProposal(input: unknown) {
   };
   const store = await getStore();
   await store.set("proposals", proposal.id, proposal);
+  if (p.kind === "new_company" && p.candidateId) {
+    await setCandidateStatus(p.candidateId, "proposed", p.proposedBy, "new_company proposal submitted", { proposalId: proposal.id, companyId: id }, true);
+  }
   return proposal;
 }
 
@@ -187,6 +205,9 @@ async function apply(p: Proposal, how: "auto" | "owner") {
     source: p.sourceUrls.join(" "),
     proposalId: p.id,
   });
+  if (p.kind === "new_company" && p.candidateId) {
+    await setCandidateStatus(p.candidateId, "published", how === "auto" ? "auto" : "owner", "company published", { companyId: final.id }, true);
+  }
   if (p.kind === "recheck_result") {
     const store = await getStore();
     const open = await store.list("checks", { where: [["companyId", p.companyId], ["status", "open"]] });
@@ -200,6 +221,10 @@ export async function decide(id: string, action: "approve" | "reject", notes = "
   if (!p) throw new Error("Proposal not found");
   if (p.status !== "pending" && p.status !== "validating") throw new Error(`Already ${p.status}`);
   if (action === "approve") await apply(p, "owner");
+  // A rejected company stays rejected as a candidate, so discovery does not keep resurfacing it.
+  if (action === "reject" && p.kind === "new_company" && p.candidateId) {
+    await setCandidateStatus(p.candidateId, "rejected", "owner", notes || "new_company proposal rejected", {}, true).catch(() => {});
+  }
   await store.update("proposals", id, { status: action === "approve" ? "approved" : "rejected", reviewerNotes: notes, decidedAt: new Date().toISOString() });
 }
 

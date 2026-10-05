@@ -9,7 +9,8 @@ const OPT={
   model:["Subscription","Usage","Take rate","One-time purchase","Ads","Retainer/project fees","Licensing","Subscription + usage","One-time + subscription"],
   metricType:["Revenue","ARR","Annualized run-rate","Net income","Adj. EBITDA","Free cash flow","GMV","Gross consumer spend","Units","Users","Third-party estimate","Acquisition price"],
   tier:["Audited filing","Regulatory/acquirer filing","Company financial statements","Reputable press","Third-party analytics","Company-reported","Founder post"],
-  flags:["Hit-dependent","Decelerating","Conflicting figures","Metric-type risk","Customer concentration","Pending disclosure"]
+  flags:["Hit-dependent","Decelerating","Conflicting figures","Metric-type risk","Customer concentration","Pending disclosure"],
+  industry:["Software","Developer tools","Productivity","Consumer","Gaming","Entertainment","Media","Advertising","Creative services","Commerce","Health","Finance","Hardware","Consumer goods","Marketplaces","Services","Other"]
 };
 const DIMS=[["scale","Scale"],["growth","Growth"],["profit","Profitability"],["efficiency","Efficiency"],["durability","Durability"]];
 const WEIGHT={5:1,4:.9,3:.75,2:.55,1:.3,0:0};
@@ -368,10 +369,13 @@ $("#askForm").addEventListener("submit",e=>{e.preventDefault();const q=$("#askIn
 
 function localMatch(q){
   const s=q.toLowerCase();
-  let ids=items.filter(d=>[d.name,d.form,d.digital,d.aiRole,roleName(d.aiRole),d.customer,d.model,...(d.flags||[]),d.summary].join(" ").toLowerCase().includes(s)).map(d=>d.id);
+  let ids=items.filter(d=>[d.name,d.form,d.digital,d.aiRole,roleName(d.aiRole),d.customer,d.model,d.industry,d.ecosystemRole,d.parentCompany,...(d.tags||[]),...(d.flags||[]),d.summary].join(" ").toLowerCase().includes(s)).map(d=>d.id);
   if(!ids.length){
     const rules=[[/profit/,d=>/^verified/i.test(d.profitability||"")],[/non-ai|no ai|without ai|traditional/,d=>d.aiRole==="None"],[/\bai\b/,d=>d.aiRole!=="None"],[/physical|product|hardware/,d=>/Physical|Hardware/.test(d.form)],[/game/,d=>d.form==="Game"],[/hype|thin|claims/,d=>d.strength>=12&&d.confidence<=2],[/app|software|saas/,d=>/app|software/i.test(d.form)],[/acquir/,d=>(d.evidence||[]).some(e=>e.type==="Acquisition price")]];
     // Several matching terms narrow the result ("profitable games" = profitable AND games); fall back to either if nothing has both.
+    // Any industry or tag named in the query also narrows the result ("creator tools subscription").
+    const labels=[...new Set(items.flatMap(d=>[d.industry,...(d.tags||[])]).filter(Boolean))];
+    for(const lb of labels){const l=lb.toLowerCase();if(l.length>2&&s.includes(l.replace(/s$/,"")))rules.push([/./,d=>d.industry===lb||(d.tags||[]).includes(lb)])}
     const sets=rules.filter(([re])=>re.test(s)).map(([,fn])=>new Set(items.filter(fn).map(d=>d.id)));
     const all=sets.length?[...sets[0]].filter(id=>sets.every(x=>x.has(id))):[];
     ids=all.length?all:[...new Set(sets.flatMap(x=>[...x]))];
@@ -420,11 +424,11 @@ async function ask(q){
 
 /* ---------- board ---------- */
 function fillFilters(){
-  [["fRole","aiRole"],["fDig","digital"],["fForm","form"]].forEach(([id,k])=>{const el=$("#"+id);OPT[k].forEach(o=>el.insertAdjacentHTML("beforeend",`<option>${esc(o)}</option>`));el.addEventListener("change",renderBoard)});
+  [["fInd","industry"],["fRole","aiRole"],["fDig","digital"],["fForm","form"]].forEach(([id,k])=>{const el=$("#"+id);if(!el)return;OPT[k].forEach(o=>el.insertAdjacentHTML("beforeend",`<option>${esc(o)}</option>`));el.addEventListener("change",renderBoard)});
   $("#q").addEventListener("input",renderBoard);
   $("#legend").innerHTML=OPT.aiRole.map(r=>`<span style="--c:${ROLE_C[r]}">${roleName(r)}</span>`).join("");
 }
-function filtered(){const q=$("#q").value.trim().toLowerCase(),r=$("#fRole").value,g=$("#fDig").value,f=$("#fForm").value;return items.filter(d=>(!q||(d.name||"").toLowerCase().includes(q))&&(!r||d.aiRole===r)&&(!g||d.digital===g)&&(!f||d.form===f))}
+function filtered(){const q=$("#q").value.trim().toLowerCase(),i=$("#fInd")?.value||"",r=$("#fRole").value,g=$("#fDig").value,f=$("#fForm").value;return items.filter(d=>(!q||[d.name,...(d.tags||[])].join(" ").toLowerCase().includes(q))&&(!i||d.industry===i)&&(!r||d.aiRole===r)&&(!g||d.digital===g)&&(!f||d.form===f))}
 function renderStats(){const el=$("#stats");if(!el)return;if(!items.length){el.innerHTML="";return}
   const top=[...items].filter(d=>d.included).sort((a,b)=>b.signal-a.signal)[0],ver=items.filter(d=>profitState(d)==="verified").length,watch=items.filter(d=>!d.included).length,trusted=items.filter(d=>d.confidence>=3).length;
   const st=(k,v,sub)=>`<div class="stat"><span class="k">${k}</span><b>${v}</b><span class="s">${sub}</span></div>`;
@@ -525,7 +529,8 @@ function openDetail(id){
   ${(d.flags||[]).length?`<section class="sec"><h4>Watch-outs</h4><div class="flags">${d.flags.map(f=>`<span>${esc(f)}</span>`).join("")}</div></section>`:""}
   <section class="sec"><h4>Score breakdown</h4><div class="vbars">${DIMS.map(([k,l])=>bar(l,num(sc[k]),5,"")).join("")}</div></section>
   <section class="sec"><h4>Evidence</h4>${ev?`<ul class="evl">${ev}</ul>`:"<p>No evidence logged yet.</p>"}</section>
-  <section class="sec"><h4>Details</h4><dl class="facts">${safeUrl(d.website)?`<div><dt>Website</dt><dd><a class="wlink" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">${esc(d.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))} ↗</a></dd></div>`:""}${fact("Revenue model",d.model)}${fact("Customer",d.customer)}${fact("Digital intensity",d.digital)}${fact("Launched",d.launched)}${fact("Re-check when",d.recheck)}</dl></section>
+  ${(d.tags||[]).length?`<section class="sec"><h4>Tags</h4><div class="flags">${d.tags.map(t=>`<span>${esc(t)}</span>`).join("")}</div></section>`:""}
+  <section class="sec"><h4>Details</h4><dl class="facts">${fact("Industry",d.industry)}${fact("Ecosystem role",d.ecosystemRole)}${d.entityType==="product"&&d.parentCompany?fact("Product of",d.parentCompany):""}${safeUrl(d.website)?`<div><dt>Website</dt><dd><a class="wlink" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">${esc(d.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))} ↗</a></dd></div>`:""}${fact("Revenue model",d.model)}${fact("Customer",d.customer)}${fact("Digital intensity",d.digital)}${fact("Launched",d.launched)}${fact("Re-check when",d.recheck)}</dl></section>
   <div class="actions">${location.hash!=="#board"?`<a class="btn" href="#board" data-goboard>See it on the board</a>`:""}${canWrite?`<button class="btn danger" data-del>Delete</button><button class="btn primary" data-edit>Edit</button>`:""}</div>`);
   const sh=$("#sheetIn");
   sh.querySelector("[data-close]").addEventListener("click",closeSheet);

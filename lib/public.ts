@@ -4,7 +4,8 @@ import type { Company } from "./schema";
 
 /** What the public sees: the stored record plus server-computed strength, signal and inclusion. */
 export function publicCompany(c: Company) {
-  const { watch: _watch, ...rest } = c;
+  // Internal fields: source watch pointers and discovery provenance.
+  const { watch: _watch, discoveredFrom: _from, discoveredAt: _at, ...rest } = c;
   const d = derive(rest);
   return { ...rest, strength: d.strength, signal: d.signal, included: d.included };
 }

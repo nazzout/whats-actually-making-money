@@ -44,3 +44,6 @@ html:has(.admin), html:has(.admin) body { background: #FFFFFF; }
 .login { max-width: 380px; margin: 12vh auto 0; }
 .login input { width: 100%; border: 1px solid var(--line); background: var(--soft); border-radius: 12px; padding: 12px 14px; font: inherit; margin: 14px 0 10px; }
 .err { color: var(--danger); font-size: 14px; }
+.a-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.a-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--line, #E7E7EA); }
+.a-table td { padding: 8px; border-bottom: 1px solid var(--line, #E7E7EA); }

@@ -9,6 +9,11 @@ export const MODELS = ["Subscription", "Usage", "Take rate", "One-time purchase"
 export const METRIC_TYPES = ["Revenue", "ARR", "Annualized run-rate", "Net income", "Adj. EBITDA", "Free cash flow", "GMV", "Gross consumer spend", "Units", "Users", "Third-party estimate", "Acquisition price"] as const;
 export const TIERS = ["Audited filing", "Regulatory/acquirer filing", "Company financial statements", "Reputable press", "Third-party analytics", "Company-reported", "Founder post"] as const;
 export const FLAGS = ["Hit-dependent", "Decelerating", "Conflicting figures", "Metric-type risk", "Customer concentration", "Pending disclosure"] as const;
+// AI is deliberately not an industry: aiRole carries it, so AI and non-AI companies can be compared within an industry.
+export const INDUSTRIES = ["Software", "Developer tools", "Productivity", "Consumer", "Gaming", "Entertainment", "Media", "Advertising", "Creative services", "Commerce", "Health", "Finance", "Hardware", "Consumer goods", "Marketplaces", "Services", "Other"] as const;
+export const ECOSYSTEM_ROLES = ["End product", "Platform", "Enabling tool", "Infrastructure", "Marketplace", "Service layer"] as const;
+// A tracked entity can be a company, or a product owned by another company (Claude by Anthropic, ReelShort by Crazy Maple Studio).
+export const ENTITY_TYPES = ["company", "product"] as const;
 
 const score = z.number().int().min(0).max(5);
 const url = z.string().trim().regex(/^https?:\/\//i, "Must start with http:// or https://");
@@ -37,6 +42,14 @@ export const WatchSchema = z
   })
   .partial();
 
+// Where a company first came from. Internal: stripped from public output.
+export const DiscoveredFromSchema = z.object({
+  source: z.string().trim().min(1).max(120),
+  url: url.optional(),
+  lane: z.string().trim().max(60).optional(),
+  candidateId: z.string().trim().max(80).optional(),
+});
+
 export const CompanySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,59}$/, "Lowercase slug"),
   name: z.string().trim().min(1),
@@ -58,6 +71,14 @@ export const CompanySchema = z.object({
   flags: z.array(z.enum(FLAGS)).default([]),
   evidence: z.array(EvidenceSchema).default([]),
   watch: WatchSchema.optional(),
+  // Phase 2 classification. Optional so older records stay valid; empty means not classified yet, not "unknown".
+  industry: z.enum(INDUSTRIES).optional(),
+  ecosystemRole: z.enum(ECOSYSTEM_ROLES).optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+  entityType: z.enum(ENTITY_TYPES).optional(),
+  parentCompany: z.string().trim().min(1).max(120).optional(),
+  discoveredFrom: DiscoveredFromSchema.optional(),
+  discoveredAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });
 export type Company = z.infer<typeof CompanySchema>;

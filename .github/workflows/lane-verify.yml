@@ -38,6 +38,10 @@ jobs:
         if: inputs.fixture_test
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Only used to report the test's cost; MCP is disabled in test mode.
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          LANE: verify-fixture
+          AGENT_NAME: verify-fixture
         run: |
           chmod +x scripts/agent-run.sh
           # Strip the _purpose/_expected fields so the agent is not told the answer.
@@ -70,6 +74,8 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          LANE: verify
+          AGENT_NAME: verify-agent
         run: |
           chmod +x scripts/agent-run.sh
           scripts/agent-run.sh agents/lane-verify.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl \
