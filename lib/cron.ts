@@ -1,6 +1,7 @@
 import { listCompanies, newId } from "./data";
 import { getStore } from "./store";
 import { PAYWALLED, hostOf, onList } from "./sources-config";
+import { pollXbrl } from "./xbrl";
 
 // Cron jobs never edit company data. They only open re-check tasks (checks collection, status "open")
 // that agents pick up through GET /api/agent/rechecks, and the owner sees in the review queue.
@@ -8,7 +9,7 @@ import { PAYWALLED, hostOf, onList } from "./sources-config";
 const UA = () => process.env.SEC_USER_AGENT || "MakingMoneyResearch/1.0";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function openTask(t: { kind: string; companyId: string; target: string; summary: string; key: string; detail?: unknown }) {
+export async function openTask(t: { kind: string; companyId: string; target: string; summary: string; key: string; detail?: unknown }) {
   const store = await getStore();
   const dupe = await store.list("checks", { where: [["key", t.key], ["status", "open"]], limit: 1 });
   if (dupe.length) return false;
@@ -196,6 +197,13 @@ export async function runFilingPolls() {
       if (w.secCik) {
         r.edgar = await pollEdgar(c.id, w.secCik);
         await sleep(200); // EDGAR asks for no more than 10 requests per second
+        // Structured revenue: proposes newer periods, opens tasks on disagreement. Failure here never blocks other sources.
+        try {
+          r.xbrl = await pollXbrl(c, w.secCik, openTask);
+        } catch (e) {
+          r.xbrl = { error: e instanceof Error ? e.message : "error" };
+        }
+        await sleep(200);
       }
       if (w.companiesHouse) r.companiesHouse = await pollCompaniesHouse(c.id, w.companiesHouse);
       if (w.rss?.length) {
