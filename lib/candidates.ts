@@ -47,11 +47,28 @@ export const normName = (n: string) =>
     .replace(SUFFIX, " ")
     .replace(/\s+/g, " ")
     .trim();
-// Full hostname without www, so products on subdomains (gemini.google.com) stay distinct from their parent (google.com).
+// Storefronts host many unrelated products, so their domain alone says nothing about identity.
+const STOREFRONTS = /(^|\.)(steampowered\.com|apps\.apple\.com|play\.google\.com|epicgames\.com|gog\.com|itch\.io|amazon\.[a-z.]+|kickstarter\.com|etsy\.com|shopify\.com)$/;
+/**
+ * Identity key for a website. Normally the full hostname without www, so products on subdomains
+ * (gemini.google.com) stay distinct from their parent (google.com). On storefronts it is the page path
+ * (store.steampowered.com/app/3164500), so two different Steam games never collide; a bare storefront root is no key at all.
+ */
 export const hostKey = (u?: string) => {
   if (!u) return "";
   try {
-    return new URL(u).hostname.toLowerCase().replace(/^www\./, "");
+    const url = new URL(u);
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (!STOREFRONTS.test(host)) return host;
+    const steam = host.endsWith("steampowered.com") && url.pathname.match(/\/app\/(\d+)/);
+    if (steam) return `${host}/app/${steam[1]}`;
+    // The same App Store app appears under every country path (/us/, /gb/); the numeric id is stable.
+    const apple = host === "apps.apple.com" && url.pathname.match(/\/id(\d+)/);
+    if (apple) return `apps.apple.com/id${apple[1]}`;
+    const play = host === "play.google.com" && url.searchParams.get("id");
+    if (play) return `play.google.com/${play.toLowerCase()}`;
+    const path = url.pathname.toLowerCase().replace(/\/+$/, "");
+    return path && path !== "/" ? `${host}${path}` : "";
   } catch {
     return "";
   }
