@@ -1,0 +1,84 @@
+name: Lane D - disconfirmation
+
+# Weekly on Monday. Manual runs can also run the fixture test, which never touches the database.
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+    inputs:
+      fixture_test:
+        description: "Run the GMV-as-revenue fixture test instead of a real pass"
+        type: boolean
+        default: false
+      max_companies:
+        description: "Max companies this run"
+        default: "5"
+
+concurrency:
+  group: lane-verify
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://whatmakesmoney.io
+  MODEL: ${{ vars.LANE_VERIFY_MODEL || 'claude-opus-5-5' }}
+  MAX_BUDGET_USD: ${{ vars.LANE_VERIFY_BUDGET_USD || '4' }}
+  MAX_COMPANIES: ${{ inputs.max_companies || vars.LANE_VERIFY_MAX_COMPANIES || '5' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fixture test (GMV labeled as revenue)
+        if: inputs.fixture_test
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          # Strip the _purpose/_expected fields so the agent is not told the answer.
+          RECORD=$(python3 -c "import json;d=json.load(open('agents/fixtures/gmv-as-revenue.json'));print(json.dumps({k:v for k,v in d.items() if not k.startswith('_')},ensure_ascii=False))")
+          scripts/agent-run.sh agents/lane-verify.md "$MODEL" 1.5 transcript.jsonl \
+            "TEST MODE. Do not call any MCP tools and do not submit anything. Review only this single record as if it were on the board: $RECORD
+          Reply with JSON only, no markdown: {\"flagged\": true|false, \"issues\": [{\"field\": \"...\", \"problem\": \"one plain sentence\"}]}" --no-mcp
+          # Pass only if the agent flagged the record and named GMV or gross merchandise value.
+          python3 - <<'PY'
+          import json, re, sys
+          res = None
+          for line in open("transcript.jsonl"):
+              try:
+                  ev = json.loads(line)
+              except ValueError:
+                  continue
+              if ev.get("type") == "result":
+                  res = ev
+          text = str((res or {}).get("result", ""))
+          m = re.search(r"\{.*\}", text, re.S)
+          verdict = json.loads(m.group(0)) if m else {}
+          blob = json.dumps(verdict).lower()
+          ok = verdict.get("flagged") is True and ("gmv" in blob or "gross merchandise" in blob)
+          print("PASS: disconfirmation caught GMV labeled as revenue" if ok else f"FAIL: verdict was {verdict}")
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Run disconfirmation agent
+        if: ${{ !inputs.fixture_test }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          scripts/agent-run.sh agents/lane-verify.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl \
+            "Limit: at most $MAX_COMPANIES companies this run. Start with private companies and anything self-reported or low trust."
+
+      - name: Upload transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-verify-transcript
+          path: transcript.jsonl
+          retention-days: 30

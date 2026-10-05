@@ -1,0 +1,23 @@
+{
+  "_purpose": "Test fixture for the disconfirmation lane. Never written to the database. Vinted's real FY2025 GMV (about EUR 10.8B) is deliberately labeled as Revenue. The lane passes only if it flags this.",
+  "_expected": "flagged: true, with an issue identifying GMV (or gross merchandise value) recorded as revenue",
+  "id": "vinted",
+  "name": "Vinted",
+  "form": "Marketplace/platform",
+  "customer": "C2C/marketplace",
+  "model": "Take rate",
+  "website": "https://www.vinted.com",
+  "profitability": "Not publicly verified.",
+  "summary": "European second-hand fashion marketplace.",
+  "evidence": [
+    {
+      "metric": "Revenue",
+      "value": "€10.8B",
+      "period": "FY2025",
+      "type": "Revenue",
+      "tier": "Company financial statements",
+      "selfReported": false,
+      "source": "Vinted annual results"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+name: Lane A - re-checks
+
+# Daily, one hour after the Vercel source-polling crons (06:00 and 06:30 UTC).
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+    inputs:
+      max_companies:
+        description: "Max companies this run"
+        default: "3"
+
+concurrency:
+  group: lane-filings
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://whatmakesmoney.io
+  # Override any of these with repository variables (Settings > Secrets and variables > Actions > Variables).
+  MODEL: ${{ vars.LANE_FILINGS_MODEL || 'claude-sonnet-5-5' }}
+  MAX_BUDGET_USD: ${{ vars.LANE_FILINGS_BUDGET_USD || '0.75' }}
+  MAX_COMPANIES: ${{ inputs.max_companies || vars.LANE_FILINGS_MAX_COMPANIES || '3' }}
+
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      # Empty queue = no model call. This step is the main cost control.
+      - name: Check the re-check queue
+        id: queue
+        env:
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          curl -fsS -H "Authorization: Bearer $AGENT_API_KEY" "$SITE_URL/api/agent/rechecks" > due.json
+          python3 - <<'PY'
+          import json, os
+          due = json.load(open("due.json")).get("due", [])
+          n = int(os.environ["MAX_COMPANIES"])
+          pick = due[:n]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"count={len(pick)}\n")
+              f.write("ids=" + ",".join(c["id"] for c in pick) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"**Queue:** {len(due)} due, working {len(pick)}: {', '.join(c['id'] for c in pick) or 'none'}\n\n")
+          PY
+
+      - name: Nothing to do
+        if: steps.queue.outputs.count == '0'
+        run: echo "Queue empty. Exiting without calling the model." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Run re-check agent
+        if: steps.queue.outputs.count != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          IDS: ${{ steps.queue.outputs.ids }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          scripts/agent-run.sh agents/lane-filings.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl \
+            "Companies for this run, in priority order: $IDS"
+
+      - name: Upload transcript
+        if: always() && steps.queue.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-filings-transcript
+          path: transcript.jsonl
+          retention-days: 30
