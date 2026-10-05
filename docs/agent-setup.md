@@ -80,6 +80,21 @@ auto-publish (routine confirmations) or wait in `/admin/review`.
 > Set `proposedBy` to "verify-agent". Disagreement with Lane A is a useful result, not a
 > failure. Do not resolve conflicts yourself; surface them.
 
+## Scheduled runs (GitHub Actions)
+
+The lanes above also run unattended. Prompts live in `agents/`, the runner in `scripts/agent-run.sh`.
+
+- `.github/workflows/lane-filings.yml`: re-checks, daily 07:00 UTC, `claude-sonnet-5-5`. Exits before any model call when the queue is empty. At most 3 companies and $0.75 per run.
+- `.github/workflows/lane-verify.yml`: disconfirmation, Mondays 09:00 UTC, `claude-opus-5-5`. At most 5 companies and $4 per run.
+
+Secrets: `ANTHROPIC_API_KEY` (the `wmm-agents` key) and `AGENT_API_KEY`. Override models, budgets and caps with repository variables `LANE_FILINGS_MODEL`, `LANE_FILINGS_BUDGET_USD`, `LANE_FILINGS_MAX_COMPANIES`, and the same with `LANE_VERIFY_`.
+
+Every run uploads its transcript as an artifact and fails loudly on any API error, so GitHub emails you when a key expires or credits run out.
+
+To test the disconfirmation lane without touching data, run Lane D manually with `fixture_test` checked. It must catch GMV labeled as revenue or the run fails.
+
+Only watch RSS feeds that carry company or financial news. An editorial feed opens a re-check task for every article.
+
 ## Why two lanes
 
 Agreement between two agents that used the same method is not evidence. These lanes are
