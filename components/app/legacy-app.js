@@ -371,37 +371,50 @@ function localMatch(q){
   let ids=items.filter(d=>[d.name,d.form,d.digital,d.aiRole,roleName(d.aiRole),d.customer,d.model,...(d.flags||[]),d.summary].join(" ").toLowerCase().includes(s)).map(d=>d.id);
   if(!ids.length){
     const rules=[[/profit/,d=>/^verified/i.test(d.profitability||"")],[/non-ai|no ai|without ai|traditional/,d=>d.aiRole==="None"],[/\bai\b/,d=>d.aiRole!=="None"],[/physical|product|hardware/,d=>/Physical|Hardware/.test(d.form)],[/game/,d=>d.form==="Game"],[/hype|thin|claims/,d=>d.strength>=12&&d.confidence<=2],[/app|software|saas/,d=>/app|software/i.test(d.form)],[/acquir/,d=>(d.evidence||[]).some(e=>e.type==="Acquisition price")]];
-    rules.forEach(([re,fn])=>{if(re.test(s))ids.push(...items.filter(fn).map(d=>d.id))});
-    ids=[...new Set(ids)];
+    // Several matching terms narrow the result ("profitable games" = profitable AND games); fall back to either if nothing has both.
+    const sets=rules.filter(([re])=>re.test(s)).map(([,fn])=>new Set(items.filter(fn).map(d=>d.id)));
+    const all=sets.length?[...sets[0]].filter(id=>sets.every(x=>x.has(id))):[];
+    ids=all.length?all:[...new Set(sets.flatMap(x=>[...x]))];
   }
   return ids;
 }
 let askCtl=null;
+const ASK_MAX=280;
+// Questions that need synthesis go to AI. Plain filters ("profitable games") are answered from the data for free.
+const SYNTH=/\b(why|how|pattern|common|compare|comparison|versus|vs|better|best|worse|outperform|worth|should|build|opportunit|trend|explain|insight|difference|similar|what makes|what do|what are .* doing)\b/i;
+const untilWord=iso=>{const ms=Date.parse(iso)-Date.now();if(!(ms>0))return "";const h=Math.floor(ms/36e5),m=Math.ceil((ms%36e5)/6e4);return h?`${h}h ${m}m`:`${m}m`};
+function searchResult(q,local,note){
+  setHighlight(local);
+  const found=local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Nothing in the dataset matches that yet. Try a company name, a category like games or physical products, or open the board.";
+  showAnswer(note?`${note} ${found}`:found,local,"Search");
+}
 async function ask(q){
+  if([...q].length>ASK_MAX){showAnswer(`Please shorten your question to ${ASK_MAX} characters or less.`,[],"Search");return}
   const exact=items.find(d=>d.name.toLowerCase()===q.toLowerCase());
   if(exact){setHighlight([exact.id]);showAnswer(`${exact.name}: signal ${exact.included?exact.signal:"watchlist"}, trust ${exact.confidence}/5, strength ${exact.strength}/25.`,[exact.id],"Exact match");openDetail(exact.id);return}
   const local=localMatch(q);
-  if(!sample){setHighlight(local);showAnswer(local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Nothing in the ledger matches that yet. Try a company name, a category like games or physical products, or open the board.",local,"Keyword match");return}
+  // Dataset first: a simple filter with matches never spends an AI question.
+  if(!sample||(local.length&&!SYNTH.test(q))){searchResult(q,local);return}
   const btn=$("#askBtn"); btn.disabled=true; btn.textContent="Thinking…";
-  $("#answer").innerHTML=`<div class="answer" role="status"><p>Mapping your question to the ledger…</p></div>`;
+  $("#answer").innerHTML=`<div class="answer" role="status"><p>Checking the dataset…</p></div>`;
   askCtl?.abort(); askCtl=new AbortController();
-  const data=items.map(d=>({id:d.id,name:d.name,form:d.form,customer:d.customer,model:d.model,digital:d.digital,aiRole:d.aiRole,confidence:d.confidence,strength:d.strength,signal:d.signal,included:d.included,profitability:d.profitability,flags:d.flags,summary:d.summary,headline:(d.evidence||[])[0]}));
-  const prompt=`You help someone explore a research ledger of emerging companies. Each company has an evidence confidence score (0-5, how trustworthy the numbers are) and a commercial strength score (0-25). "included" false means watchlist. Only use the data below; never add outside facts. If the data cannot answer, say so plainly and suggest what to search instead.
-
-DATA: ${JSON.stringify(data)}
-
-QUESTION: ${q}
-
-Respond with JSON only, no markdown: {"ids":["company ids that answer the question, most relevant first; empty if none"],"answer":"1-2 plain sentences answering from the data, mentioning confidence where it matters"}`;
   try{
     const r=await sample.json(q,{signal:askCtl.signal});
-    const ids=(Array.isArray(r?.ids)?r.ids:[]).filter(id=>items.some(d=>d.id===id));
-    if(ids.length)setHighlight(ids); else clearHighlight();
-    showAnswer(r?.answer||"No answer came back. Try rephrasing.",ids,"Answered from the ledger by Claude");
+    if(r?.mode==="ai"||r?.mode==="cached"){
+      const ids=(Array.isArray(r.ids)?r.ids:[]).filter(id=>items.some(d=>d.id===id));
+      if(ids.length)setHighlight(ids); else clearHighlight();
+      const left=typeof r.remainingToday==="number"?` · ${r.remainingToday} AI ${r.remainingToday===1?"question":"questions"} left today`:"";
+      showAnswer(r.answer,ids,`AI answer from the dataset${left}`);
+      return;
+    }
+    // Fixed messages and limits: show the message, then fall back to free search on the same input.
+    const wait=r?.retryAt?untilWord(r.retryAt):"";
+    if(r?.reason==="too_long"||r?.reason==="off_topic"){clearHighlight();showAnswer(r.answer,[],"Search");return}
+    searchResult(q,local,`${r?.answer||""}${wait?` More AI questions available in ${wait}.`:""}`.trim());
   }catch(err){
     if(err?.code==="cancelled")return;
     if(err?.code==="not_granted")sample=null;
-    setHighlight(local);showAnswer(local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Couldn't interpret that right now. Try a company name or a category.",local,err?.code==="rate_limited"?"Keyword match (Claude is busy, try again shortly)":"Keyword match");
+    searchResult(q,local);
   }finally{btn.disabled=false;btn.textContent="Search"}
 }
 
@@ -556,9 +569,16 @@ $("#addBtn").addEventListener("click",()=>openForm(null));
 
 /* ---------- boot (Vercel version) ---------- */
 // Reads come from the server. Owner writes go to /api/admin/companies/:id. Same Firestore-style surface the original code expects.
-let lastData=JSON.stringify(opts.initial||[]);
+let lastData=JSON.stringify(opts.initial||[]),lastVersion=null;
 async function refresh(){
   try{const r=await fetch("/api/companies",{cache:"no-store"});if(!r.ok)return;const j=await r.json();const s=JSON.stringify(j.companies||[]);if(s===lastData)return;lastData=s;items=(j.companies||[]).map(derive);renderBoard();buildField()}catch{}
+}
+// Open tabs stay current: check a tiny version hash, and download the dataset only when it changed.
+async function checkVersion(){
+  if(document.hidden)return;
+  try{const r=await fetch("/api/version",{cache:"no-store"});if(!r.ok)return;const {version}=await r.json();
+    if(lastVersion===null){lastVersion=version;return}
+    if(version!==lastVersion){lastVersion=version;await refresh()}}catch{}
 }
 async function send(method,id,body){
   const r=await fetch(`/api/admin/companies/${encodeURIComponent(id)}`,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
@@ -570,9 +590,8 @@ sample=opts.askEnabled?{async json(q,{signal}={}){
   let r;
   try{r=await fetch("/api/ask",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({q}),signal})}
   catch(e){const err=new Error("cancelled");err.code=e?.name==="AbortError"?"cancelled":"network";throw err}
-  if(r.status===429){const err=new Error("busy");err.code="rate_limited";throw err}
   if(!r.ok){const err=new Error("failed");err.code=r.status===404?"not_granted":"failed";throw err}
-  return r.json();
+  return r.json(); // always {mode, answer, ...}; see app/api/ask/route.ts
 }}:null;
 canWrite=!!opts.canWrite;
 fillFilters(); route();
@@ -581,6 +600,8 @@ $("#addBtn").hidden=!canWrite;
 $("#status").textContent=canWrite?"Signed in as owner":"Live data";
 if(canWrite){$("#addBtn").insertAdjacentHTML("beforebegin",`<a class="btn" href="/admin/review" style="text-decoration:none">Review queue</a>`)}
 renderBoard(); buildField();
-addEventListener("focus",refresh);
-setInterval(()=>{if(!document.hidden)refresh()},120000);
+checkVersion();
+addEventListener("focus",checkVersion);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)checkVersion()});
+setInterval(checkVersion,240000);
 }
