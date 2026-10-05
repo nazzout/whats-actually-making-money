@@ -20,7 +20,7 @@ export const CandidateInput = z.object({
   whyInteresting: z.string().trim().min(3).max(600),
   trendNotes: z.string().trim().max(600).default(""),
   discoveredFrom: z.object({ source: z.string().trim().min(1).max(120), url: url.optional(), lane: z.string().trim().max(60).optional() }),
-});
+}).refine((c) => c.entityType !== "product" || !!c.parentCompany, { message: "A product candidate needs parentCompany.", path: ["parentCompany"] });
 export type CandidateInputT = z.infer<typeof CandidateInput>;
 
 export type Candidate = CandidateInputT & {
@@ -92,7 +92,6 @@ export async function findDuplicates(input: { name: string; website?: string; en
 
 export async function proposeCandidate(raw: unknown) {
   const input = CandidateInput.parse(raw);
-  if (input.entityType === "product" && !input.parentCompany) throw new Error("A product candidate needs parentCompany.");
   const { duplicates, related, checked } = await findDuplicates(input);
   if (duplicates.length) return { created: false as const, duplicates };
   const now = new Date().toISOString();
