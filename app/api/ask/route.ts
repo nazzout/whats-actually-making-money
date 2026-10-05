@@ -14,11 +14,14 @@ export const maxDuration = 30;
 // mode: "ai" (model answer), "cached", "message" (fixed copy, show keyword results), "limit" (quota/paused).
 
 const VISITOR = "mm_vid";
+// Bump when SYSTEM changes so answers written under the old prompt are not served from cache.
+const PROMPT_VERSION = "2";
 
 const SYSTEM =
   "You answer questions for What Makes Money, a research dataset of businesses: their revenue, profitability, growth, business models, AI role and evidence quality. " +
   "Each company has a trust score (0 to 5, how reliable the financial evidence is) and a business strength score (0 to 25). included false means watchlist. " +
   "Use only the DATA provided. Never add outside facts, never guess figures, never browse. " +
+  "Describe evidence by its exact tier. Only call a figure audited if its tier is Audited filing. Company financial statements, company-reported figures, press and estimates are not audited, so say what they are. " +
   "If the question is not about businesses, products, industries, business models, revenue, growth, pricing, distribution, AI role, momentum, comparisons, or what may be worth building, reply exactly {\"offTopic\":true}. " +
   "If the question is on topic but the DATA cannot answer it, reply exactly {\"insufficient\":true}. " +
   "Otherwise answer in 2 to 5 short plain sentences. No jargon, no filler, no em dashes, do not repeat the question. Mention trust where it matters and state uncertainty directly. " +
@@ -46,7 +49,7 @@ export async function POST(req: Request) {
 
   // 3. Cache by normalized question + dataset version. A hit costs nothing and uses no quota.
   const norm = normalize(raw);
-  const cid = cacheId(norm, datasetVersion(companies));
+  const cid = cacheId(norm, `${datasetVersion(companies)}:p${PROMPT_VERSION}`);
   const hit = await getCached(cid);
   if (hit) {
     await logAsk({ q: raw, route: "cache" });
