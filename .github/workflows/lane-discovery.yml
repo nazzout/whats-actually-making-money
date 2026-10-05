@@ -1,0 +1,89 @@
+name: Lane B - discovery
+
+# Sonnet triage three times a week, rotating category groups.
+# An independent Opus sweep on Sundays, so Sonnet is never the only gatekeeper.
+on:
+  schedule:
+    - cron: "0 8 * * 1,3,5"
+    - cron: "0 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "sonnet (rotating triage) or opus (independent sweep)"
+        default: "sonnet"
+      max_candidates:
+        description: "Max candidates this run"
+        default: "5"
+
+concurrency:
+  group: lane-discovery
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://whatmakesmoney.io
+  MODE: ${{ github.event.schedule == '0 8 * * 0' && 'opus' || inputs.mode || 'sonnet' }}
+  MAX_CANDIDATES: ${{ inputs.max_candidates || vars.LANE_DISCOVERY_MAX_CANDIDATES || '5' }}
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick model, budget and focus
+        id: plan
+        env:
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          SONNET_MODEL: ${{ vars.LANE_DISCOVERY_MODEL || 'claude-sonnet-5-5' }}
+          OPUS_MODEL: ${{ vars.LANE_SWEEP_MODEL || 'claude-opus-5-5' }}
+          SONNET_BUDGET: ${{ vars.LANE_DISCOVERY_BUDGET_USD || '0.75' }}
+          OPUS_BUDGET: ${{ vars.LANE_SWEEP_BUDGET_USD || '2' }}
+        run: |
+          curl -fsS -H "Authorization: Bearer $AGENT_API_KEY" "$SITE_URL/api/agent/coverage" > coverage.json
+          python3 - <<'PY'
+          import datetime, json, os
+          cov = json.load(open("coverage.json"))
+          # Fixed rotation order, advanced every run; the agent then favors the thinnest industries inside the group.
+          order = ["Consumer, apps and games", "Software and tools", "Agencies, advertising and entertainment", "Hardware, physical products, services and marketplaces"]
+          groups = {g["group"]: g for g in cov["rotation"]}
+          opus = os.environ["MODE"] == "opus"
+          if opus:
+              lane, model, budget = "discovery-opus", os.environ["OPUS_MODEL"], os.environ["OPUS_BUDGET"]
+              focus = "All groups. Deliberately look where startup and AI press does not: trade press, store charts, filings, small profitable businesses."
+          else:
+              doy = datetime.date.today().timetuple().tm_yday
+              group = order[(doy // 2) % len(order)]
+              thin = ", ".join(groups[group]["industries"]) if group in groups else ""
+              lane, model, budget = "discovery-sonnet", os.environ["SONNET_MODEL"], os.environ["SONNET_BUDGET"]
+              focus = f"{group} ({thin})."
+          extra = f"Your lane name: {lane}\nFocus: {focus}\nLimit: at most {os.environ['MAX_CANDIDATES']} new candidates."
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"lane={lane}\nmodel={model}\nbudget={budget}\n")
+              f.write("extra<<EOF\n" + extra + "\nEOF\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"**Lane:** {lane} ({model}, ${budget} cap)\n\n**Focus:** {focus}\n\n")
+          PY
+
+      - name: Run discovery agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          LANE: ${{ steps.plan.outputs.lane }}
+          AGENT_NAME: ${{ steps.plan.outputs.lane }}
+          EXTRA: ${{ steps.plan.outputs.extra }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          cat agents/_standard.md agents/lane-discovery.md > prompt.md
+          scripts/agent-run.sh prompt.md "${{ steps.plan.outputs.model }}" "${{ steps.plan.outputs.budget }}" transcript.jsonl "$EXTRA"
+
+      - name: Upload transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-discovery-transcript
+          path: transcript.jsonl
+          retention-days: 30

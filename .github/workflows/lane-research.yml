@@ -1,0 +1,75 @@
+name: Lane C - deep research
+
+# The day after each discovery run. Turns qualified candidates into new_company proposals for owner review.
+on:
+  schedule:
+    - cron: "0 9 * * 2,4,6"
+  workflow_dispatch:
+    inputs:
+      max_candidates:
+        description: "Max candidates this run"
+        default: "2"
+
+concurrency:
+  group: lane-research
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://whatmakesmoney.io
+  MODEL: ${{ vars.LANE_RESEARCH_MODEL || 'claude-opus-5-5' }}
+  MAX_BUDGET_USD: ${{ vars.LANE_RESEARCH_BUDGET_USD || '2' }}
+  MAX_CANDIDATES: ${{ inputs.max_candidates || vars.LANE_RESEARCH_MAX_CANDIDATES || '2' }}
+
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      # No qualified candidates = no model call.
+      - name: Check qualified candidates
+        id: queue
+        env:
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+        run: |
+          curl -fsS -H "Authorization: Bearer $AGENT_API_KEY" "$SITE_URL/api/agent/candidates?status=qualified" > q.json
+          python3 - <<'PY'
+          import json, os
+          cs = json.load(open("q.json")).get("candidates", [])
+          cs.sort(key=lambda c: c.get("discoveredAt", ""))  # oldest first, so nothing waits forever
+          pick = cs[: int(os.environ["MAX_CANDIDATES"])]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"count={len(pick)}\n")
+              f.write("list=" + "; ".join(f"{c['name']} (candidateId {c['id']})" for c in pick) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"**Qualified:** {len(cs)}, researching {len(pick)}: {', '.join(c['name'] for c in pick) or 'none'}\n\n")
+          PY
+
+      - name: Nothing to do
+        if: steps.queue.outputs.count == '0'
+        run: echo "No qualified candidates. Exiting without calling the model." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Run research agent
+        if: steps.queue.outputs.count != '0'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          LANE: research
+          AGENT_NAME: research-opus
+          LIST: ${{ steps.queue.outputs.list }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          cat agents/_standard.md agents/lane-research.md > prompt.md
+          scripts/agent-run.sh prompt.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl "Candidates for this run, in order: $LIST"
+
+      - name: Upload transcript
+        if: always() && steps.queue.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-research-transcript
+          path: transcript.jsonl
+          retention-days: 30
