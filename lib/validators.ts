@@ -101,7 +101,14 @@ export async function sourceChecks(list: Evidence[], indexes: number[]): Promise
           headers: { "user-agent": UA(), accept: "text/html,application/xhtml+xml,application/pdf;q=0.9,*/*;q=0.8" },
         });
         if (res.status >= 400) {
-          out.push({ rule: "link", level: res.status === 403 || res.status === 429 ? "warn" : "fail", evidence: i, message: `${tag}: link returned ${res.status}.` });
+          // 401, 403 and 429 mean the site refused an automated fetch (Reuters returns 401), not that the page is gone.
+          const blocked = res.status === 401 || res.status === 403 || res.status === 429;
+          out.push({
+            rule: "link",
+            level: blocked ? "warn" : "fail",
+            evidence: i,
+            message: blocked ? `${tag}: ${host} refused the automated check (${res.status}). Confirm by hand.` : `${tag}: link returned ${res.status}.`,
+          });
           return;
         }
         if (/\/(login|signin|sign-in|subscribe|paywall)\b/i.test(res.url)) {
