@@ -71,6 +71,9 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .tile-ico:hover .cap,.tile-ico:focus-visible .cap{opacity:1}
 .tile-ico:focus-visible{outline:none}.tile-ico:focus-visible .ico-xl{outline:2.5px solid var(--brand);outline-offset:4px}
 .ico-s{width:26px;height:26px;border-radius:7px;font-size:13px}
+/* Steam logo is white, so its tile is always Steam navy (overrides the light board and sheet tiles). Padded so the mark is not cropped. */
+.ico.ico-steam,#board .row .ico-s.ico-steam,.dh-id .ico.ico-steam{background:#171A21;color:#FFFFFF}
+.ico.ico-steam img{object-fit:contain;padding:18%}
 .row .nm{display:flex;align-items:center;gap:10px;min-width:0}
 .dotrole{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600}
 .dotrole::before{content:"";width:9px;height:9px;border-radius:50%;background:var(--c)}

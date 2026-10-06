@@ -29,14 +29,18 @@ const initial=n=>esc((String(n||"?").match(/[\p{L}\p{N}]/u)||["?"])[0].toUpperCa
 // Logos: an explicit `icon` wins; otherwise Brandfetch Logo API (free, must be hotlinked, never cached) from the company website.
 // Store pages (Steam, App Store) would return the store's logo, so those keep the letter tile. Missing logos 404 and fall back to the letter tile.
 const STORE_HOSTS=/(^|\.)(steampowered\.com|apple\.com|google\.com|epicgames\.com|itch\.io|gog\.com)$/i;
+// Games listed by their Steam page get the Steam logo (white, so it sits on Steam's dark navy). An explicit icon still wins.
+const STEAM_ICON="/icons/steam.png";
+const isSteam=d=>{try{return /(^|\.)steampowered\.com$/i.test(new URL(d.website).hostname)}catch{return false}};
 const logoSrc=d=>{
   if(d.icon&&(/^https:\/\//i.test(d.icon)||!/^[a-z]+:/i.test(d.icon)))return d.icon;
+  if(d.website&&isSteam(d))return STEAM_ICON;
   if(!opts.brandfetchId||!d.website)return "";
   let h;try{h=new URL(d.website).hostname.replace(/^www\./,"")}catch{return ""}
   if(STORE_HOSTS.test(h))return "";
   return `https://cdn.brandfetch.io/domain/${encodeURIComponent(h)}/w/256/h/256/fallback/404/icon?c=${encodeURIComponent(opts.brandfetchId)}`;
 };
-const icoHTML=(d,cls)=>{const src=logoSrc(d);return `<span class="${cls}" aria-hidden="true" data-ini="${initial(d.name)}">${src?`<img src="${esc(src)}" alt="" loading="lazy" draggable="false">`:initial(d.name)}</span>`};
+const icoHTML=(d,cls)=>{const src=logoSrc(d);return `<span class="${cls}${src===STEAM_ICON?" ico-steam":""}" aria-hidden="true" data-ini="${initial(d.name)}">${src?`<img src="${esc(src)}" alt="" loading="lazy" draggable="false">`:initial(d.name)}</span>`};
 document.addEventListener("error",e=>{const t=e.target;if(t.tagName==="IMG"&&t.parentElement?.dataset.ini){t.parentElement.textContent=t.parentElement.dataset.ini}},true);
 function derive(d){const s=d.scores||{};const strength=DIMS.reduce((a,[k])=>a+num(s[k]),0);const conf=num(d.confidence);return {...d,strength,confidence:conf,signal:+(strength*WEIGHT[conf]).toFixed(1),included:conf>=2&&strength>=12}}
 
