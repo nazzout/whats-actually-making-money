@@ -490,7 +490,7 @@ async function ask(q){
       const ids=(Array.isArray(r.ids)?r.ids:[]).filter(id=>items.some(d=>d.id===id));
       if(ids.length)setHighlight(ids); else clearHighlight();
       const left=typeof r.remainingToday==="number"?` · ${r.remainingToday} AI ${r.remainingToday===1?"question":"questions"} left today`:"";
-      const label=r.kind==="guidance"?"Market guidance from the dataset plus a limited web check":"AI answer from the dataset";
+      const label=r.kind==="guidance"?"Market guidance, not advice: dataset plus a limited web check":"AI answer from the dataset";
       showAnswer(r.answer,ids,`${label}${left}`,r.sources);
       return;
     }
