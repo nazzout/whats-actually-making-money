@@ -25,7 +25,11 @@ export function derive<T extends Pick<Company, "scores" | "confidence">>(c: T) {
 
 export const strengthWord = (v: number) => (v >= 20 ? "Very strong" : v >= 15 ? "Strong" : v >= 12 ? "Moderate" : "Too early to call");
 
+// "Verified loss" and "Verified losses: ..." start with "Verified" too; they are verified losses, not verified profit.
+export const VERIFIED_LOSS = /^verified\W*(net\s+|operating\s+|gaap\s+|annual\s+)?loss/i;
+
 export function profitState(c: Pick<Company, "profitability">) {
-  const p = c.profitability || "";
+  const p = (c.profitability || "").trim();
+  if (VERIFIED_LOSS.test(p)) return "loss";
   return /^verified/i.test(p) ? "verified" : /claim|company-reported|self-reported/i.test(p) ? "claimed" : "none";
 }

@@ -16,7 +16,7 @@ Turn qualified candidates into complete, evidence-backed company proposals for t
      profit: 5 verified GAAP profit and positive FCF; 4 verified net profit or adj. EBITDA; 3 company-claimed profit; 2 verified positive gross margin, no profit line; 1 not publicly verified; 0 verified losses.
      efficiency: 5 over $1M revenue per employee or revenue over 5x capital raised; 4 $500K to $1M or 2 to 5x; 3 $250K to $500K or 1 to 2x; 2 lower; 1 heavily capital-dependent. If both are known use the lower.
      durability: 5 verified retention or 3+ years of sustained growth; 4 subscription or repeat model with reported retention; 3 recurring model, no retention data; 2 single hit, no recurring revenue; 1 documented decline.
-   - profitability: start with "Verified" only for verified profit; otherwise say what is claimed, or "Not publicly verified."
+   - profitability: start with "Verified" only for verified profit. For verified losses write "Verified loss: ..." (the site shows these as a verified loss, never as profit). Otherwise say what is claimed, or "Not publicly verified."
    - summary (2 to 3 sentences), caveats (what could make this wrong), recheck (the next event that would change the score), flags from: Hit-dependent, Decelerating, Conflicting figures, Metric-type risk, Customer concentration, Pending disclosure
    - evidence: every figure with metric, value, period, type, tier, selfReported, source, url. The best, most relevant figure first. Never a projection first.
    Never include strength, signal or included; the server computes them.

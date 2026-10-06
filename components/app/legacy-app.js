@@ -243,7 +243,7 @@ function pillDefs(){
 function pillLabel(k){const [t,v]=k.split(/:(.+)/);return t==="role"?roleName(v):t==="verified"?"Verified profit":v}
 function matchPill(k,d){const [t,v]=k.split(/:(.+)/);
   if(t==="role")return d.aiRole===v; if(t==="form")return d.form===v; if(t==="digital")return d.digital===v; if(t==="flag")return (d.flags||[]).includes(v);
-  if(t==="verified")return /^verified/i.test(d.profitability||""); return false}
+  if(t==="verified")return profitState(d)==="verified"; return false}
 
 function tileHTML(kind,d){
   const c=ROLE_C[d.aiRole]||"var(--none)";
@@ -433,14 +433,29 @@ function localMatch(q){
   const s=q.toLowerCase();
   let ids=items.filter(d=>[d.name,d.form,d.digital,d.aiRole,roleName(d.aiRole),d.customer,d.model,d.industry,d.ecosystemRole,d.parentCompany,...(d.tags||[]),...(d.flags||[]),d.summary].join(" ").toLowerCase().includes(s)).map(d=>d.id);
   if(!ids.length){
-    const rules=[[/profit/,d=>/^verified/i.test(d.profitability||"")],[/non-ai|no ai|without ai|traditional/,d=>d.aiRole==="None"],[/\bai\b/,d=>d.aiRole!=="None"],[/physical|product|hardware/,d=>/Physical|Hardware/.test(d.form)],[/game/,d=>d.form==="Game"],[/hype|thin|claims/,d=>d.strength>=12&&d.confidence<=2],[/app|software|saas/,d=>/app|software/i.test(d.form)],[/acquir/,d=>(d.evidence||[]).some(e=>e.type==="Acquisition price")]];
-    // Several matching terms narrow the result ("profitable games" = profitable AND games); fall back to either if nothing has both.
+    // "non-AI" must not also trigger the AI rule: the hyphen is a word boundary, so \bai\b matches inside "non-ai".
+    const NON_AI=/\bnon[- ]?ai\b|\bno ai\b|\bwithout ai\b|\btraditional\b/;
+    const rules=[
+      [q=>/\bprofit/.test(q),d=>profitState(d)==="verified"],
+      [q=>NON_AI.test(q),d=>d.aiRole==="None"],
+      [q=>/\bai\b/.test(q)&&!NON_AI.test(q),d=>d.aiRole!=="None"],
+      [q=>/\bphysical\b|\bhardware\b|\bconsumer goods\b/.test(q),d=>/Physical|Hardware/.test(d.form)],
+      [q=>/\bgames?\b|\bgaming\b/.test(q),d=>d.form==="Game"],
+      [q=>/\bhype\b|\bthin\b|\bclaims?\b/.test(q),d=>d.strength>=12&&d.confidence<=2],
+      [q=>/\bapps?\b|\bsoftware\b|\bsaas\b/.test(q),d=>/app|software/i.test(d.form)],
+      [q=>/\bacquir/.test(q),d=>(d.evidence||[]).some(e=>e.type==="Acquisition price")],
+    ];
     // Any industry or tag named in the query also narrows the result ("creator tools subscription").
+    // Words a built-in rule already handled are removed first, so "physical products" is not also read as the tag
+    // "Physical product" (two different filters on the same words left nothing).
+    const HANDLED=/\bprofit\w*|\bnon[- ]?ai\b|\bno ai\b|\bwithout ai\b|\btraditional\b|\bai\b|\bphysical\b|\bhardware\b|\bconsumer goods\b|\bgames?\b|\bgaming\b|\bhype\b|\bthin\b|\bclaims?\b|\bapps?\b|\bsoftware\b|\bsaas\b|\bacquir\w*/g;
+    const rest=s.replace(HANDLED," ");
     const labels=[...new Set(items.flatMap(d=>[d.industry,...(d.tags||[])]).filter(Boolean))];
-    for(const lb of labels){const l=lb.toLowerCase();if(l.length>2&&s.includes(l.replace(/s$/,"")))rules.push([/./,d=>d.industry===lb||(d.tags||[]).includes(lb)])}
-    const sets=rules.filter(([re])=>re.test(s)).map(([,fn])=>new Set(items.filter(fn).map(d=>d.id)));
-    const all=sets.length?[...sets[0]].filter(id=>sets.every(x=>x.has(id))):[];
-    ids=all.length?all:[...new Set(sets.flatMap(x=>[...x]))];
+    for(const lb of labels){const l=lb.toLowerCase().replace(/s$/,"");if(l.length>2&&new RegExp(`\\b${l.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}`).test(rest))rules.push([()=>true,d=>d.industry===lb||(d.tags||[]).includes(lb)])}
+    // Every matched term must hold ("profitable games" = profitable AND games). No fallback to "either":
+    // showing companies that match only part of the query misrepresents what was asked.
+    const sets=rules.filter(([test])=>test(s)).map(([,fn])=>new Set(items.filter(fn).map(d=>d.id)));
+    ids=sets.length?[...sets[0]].filter(id=>sets.every(x=>x.has(id))):[];
   }
   return ids;
 }
@@ -571,8 +586,10 @@ function periodHTML(e){
   return `<span class="tag soft" title="This figure covers ${y}. A more recent period may now be published.">Newer period may exist</span>`;
 }
 const strengthWord=v=>v>=20?"Very strong":v>=15?"Strong":v>=12?"Moderate":"Too early to call";
-function profitState(d){const p=d.profitability||"";return /^verified/i.test(p)?"verified":/claim|company-reported|self-reported/i.test(p)?"claimed":"none"}
-const PROFIT_HEAD={verified:"Profit verified",claimed:"Profit claimed, not verified",none:"Profit not verified"};
+// Must match lib/rubric.ts: "Verified losses: ..." starts with "Verified" but is a verified loss, not verified profit.
+const VERIFIED_LOSS=/^verified\W*(net\s+|operating\s+|gaap\s+|annual\s+)?loss/i;
+function profitState(d){const p=(d.profitability||"").trim();if(VERIFIED_LOSS.test(p))return "loss";return /^verified/i.test(p)?"verified":/claim|company-reported|self-reported/i.test(p)?"claimed":"none"}
+const PROFIT_HEAD={verified:"Profit verified",loss:"Verified loss",claimed:"Profit claimed, not verified",none:"Profit not verified"};
 function openDetail(id){
   const d=items.find(i=>i.id===id);if(!d)return;
   const e=(d.evidence||[])[0]||{},ps=profitState(d),sc=d.scores||{};

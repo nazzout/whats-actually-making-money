@@ -1,5 +1,6 @@
 import type { Company, Evidence } from "./schema";
 import { relDiff, textHasFigure } from "./amount";
+import { VERIFIED_LOSS } from "./rubric";
 import { ANALYTICS, DEMAND_SIGNALS, DEMAND_SIGNAL_TIERS, FILING_DOMAINS, PAYWALLED, REPUTABLE_PRESS, hostOf, isCompanyIR, onList } from "./sources-config";
 
 export type Level = "pass" | "warn" | "fail";
@@ -71,7 +72,8 @@ export function companyRules(after: Company, isNew: boolean): CheckResult[] {
   const out: CheckResult[] = [];
   if (isNew && !after.website) out.push({ rule: "website", level: "fail", message: "New companies need a website." });
   if (!after.evidence.length) out.push({ rule: "evidence", level: "warn", message: "No evidence logged." });
-  if (/^verified/i.test(after.profitability)) {
+  // A verified loss is a different claim from verified profit, so only verified-profit text needs a profit line.
+  if (/^verified/i.test(after.profitability) && !VERIFIED_LOSS.test(after.profitability.trim())) {
     const strong = after.evidence.some(
       (e) =>
         ["Net income", "Adj. EBITDA", "Free cash flow"].includes(e.type) &&
