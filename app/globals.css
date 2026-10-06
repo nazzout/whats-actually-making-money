@@ -290,7 +290,9 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 .sheet.on{box-shadow:-30px 0 80px -20px rgba(0,0,0,.6)}
 .sheet :focus-visible{outline-color:#0A0A0A}
 .sheet a.btn{text-decoration:none;display:inline-flex;align-items:center}
-.sheet-in{padding:26px 28px 34px}
+.sheet-in{padding:26px 28px 34px;overflow-x:hidden;overscroll-behavior:contain}
+/* Text in the sheet always wraps; nothing may push it wider than the screen. */
+.sheet-in h3,.sheet-in p,.sheet-in dd,.sheet-in .v-num,.sheet-in .v-cap,.sheet-in .vw{overflow-wrap:anywhere}
 .sheet .btn{background:var(--soft);border-color:transparent;color:var(--ink);font-weight:600}
 .sheet .btn.primary{background:var(--ink);color:#FFFFFF}
 .sheet .btn.danger{color:var(--danger)}
@@ -344,11 +346,14 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 .sec p{margin:0;line-height:1.5}
 .sheet .flags span{border-color:var(--line);color:var(--ink);background:var(--soft);font-weight:500}
 .evl{list-style:none;margin:0;padding:0;display:grid;gap:0}
-.evl li{display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+/* Evidence row: figure + description across the full width, source details on one wrapping line underneath. */
+.evl li{display:flex;flex-direction:column;gap:8px;padding:14px 0;border-bottom:1px solid var(--line)}
 .evl li:last-child{border-bottom:0}
-.ev-v b{display:block;font-size:17px;font-weight:700;font-variant-numeric:tabular-nums}
+.ev-v{min-width:0}
+.ev-v b{display:block;font-size:17px;font-weight:700;line-height:1.3;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .ev-v span{color:var(--muted);font-size:13px}
-.ev-s{display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:13px;color:var(--muted);text-align:right}
+.ev-s{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:13px;color:var(--muted);text-align:left}
+.ev-s .tag{margin:0}
 .ev-s a{color:#0A7A2F;font-weight:600;text-decoration:none}
 .ev-s a:hover{text-decoration:underline}
 /* Freshness: how recently the figure was confirmed against its source. */
@@ -395,3 +400,67 @@ body.board-mode .tabs a[aria-current="page"]{background:#0A0A0A;color:#FFFFFF}
 #board .seg{border-color:var(--line);background:#FFFFFF}
 #board .seg button[aria-pressed="true"]{background:#0A0A0A;color:#FFFFFF}
 #board .track{background:#E4E4E8}
+
+/* ---------- board header: chips, sticky search, podium, quiet markers ---------- */
+#board .stats{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px}
+#board .schip{border:0;background:var(--soft);border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;transition:background-color .2s,color .2s}
+#board .schip b{color:var(--ink);font-weight:700}
+#board .schip[aria-pressed="true"]{background:#0A0A0A;color:rgba(255,255,255,.72)}
+#board .schip[aria-pressed="true"] b{color:#FFFFFF}
+#board .toolbar{position:sticky;top:var(--navh,84px);z-index:20;background:#FFFFFF;padding:8px 0;margin-bottom:8px}
+.fbtn,.fsheet-head{display:none}
+.fsheet{display:contents}
+.podium{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:2px 0 8px}
+.pod{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0;border:0;border-radius:18px;padding:14px;background:var(--soft);color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:background-color .2s}
+.pod:hover{background:#ECECEF}
+.pod .pr{font-size:12.5px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.pod .ico{width:40px;height:40px;border-radius:11px;font-size:18px;background:#FFFFFF;color:var(--ink)}
+.pod .pn{width:100%;font-weight:700;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pod .ps{font-size:26px;font-weight:700;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.pod .pl{font-size:12px;color:var(--muted);margin-top:-4px}
+#board .row .rk{flex:none;min-width:20px;font-size:13px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.mk{font-size:12px;color:var(--muted);white-space:nowrap}
+.mk::before{content:"\00B7";margin:0 6px}
+.mk.new{color:#1E8F3A;font-weight:600}
+/* Board: solid nav so the list scrolls cleanly under it and the pinned search bar. */
+body.board-mode .nav{background:#FFFFFF}
+@media (min-width:761px){
+  .pod{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:12px;row-gap:4px;padding:16px 18px}
+  .pod .pr{grid-column:1/-1}
+  .pod .ps{font-size:30px}
+  .pod .pl{display:none}
+}
+@media (max-width:760px){
+  #board .toolbar{flex-wrap:nowrap}
+  .fbtn{display:inline-flex;align-items:center;gap:6px;flex:none;border:0;border-radius:999px;padding:8px 16px;background:var(--soft);color:var(--ink);font-weight:600;cursor:pointer;white-space:nowrap}
+  .fbtn .fn{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#0A0A0A;color:#FFFFFF;font-size:12px}
+  .fsheet{display:none}
+  .toolbar.open .fsheet{display:flex;flex-direction:column;gap:10px;position:fixed;left:0;right:0;bottom:0;z-index:45;max-height:80vh;overflow:auto;overscroll-behavior:contain;background:#FFFFFF;border-radius:22px 22px 0 0;padding:16px 18px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:0 0 0 100vmax rgba(0,0,0,.35);animation:pop .35s var(--spring)}
+  .toolbar.open .fsheet select{width:100%}
+  .fsheet-head{display:flex;align-items:center;gap:4px;margin-bottom:2px}
+  .fsheet-head b{flex:1;font-size:18px}
+  .fsheet-head button{border:0;background:none;padding:6px 8px;font-weight:600;color:var(--muted);cursor:pointer}
+  .fsheet-head #fDone{color:var(--ink)}
+  .podium{gap:8px}
+  .pod{padding:12px;border-radius:16px}
+  .pod .ico{width:34px;height:34px;border-radius:9px;font-size:16px}
+  .pod .pn{font-size:14px}
+  .pod .ps{font-size:22px}
+}
+
+/* ---------- detail sheet on phones ---------- */
+@media (max-width:560px){
+  .sheet-in{padding:22px 20px 30px}
+  /* Header: name block gets the full width beside the close button; Visit site drops to its own line. */
+  .dh{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:14px 12px}
+  .dh-act{display:contents}
+  .dh-act .xbtn{grid-column:2;grid-row:1}
+  .dh-act .visit{grid-column:1/-1;grid-row:2;justify-self:start}
+  .dh-id{min-width:0}
+  .dh h3{font-size:26px}
+  /* Verdict bars: label, bar, then the wrapping description, each full width. */
+  .verdict{padding:18px}
+  .verdict .vrow{grid-template-columns:minmax(0,1fr);gap:6px}
+  .verdict .vw{grid-column:1;margin-top:0;white-space:normal;text-align:left}
+  .v-top{gap:12px}
+}

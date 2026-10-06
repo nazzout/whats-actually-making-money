@@ -7,7 +7,9 @@ export function publicCompany(c: Company) {
   // Internal fields: source watch pointers and discovery provenance.
   const { watch: _watch, discoveredFrom: _from, discoveredAt: _at, ...rest } = c;
   const d = derive(rest);
-  return { ...rest, strength: d.strength, signal: d.signal, included: d.included };
+  // Only the date it was added is public (drives the "New" marker); where it came from stays internal.
+  const addedAt = typeof _at === "string" ? _at.slice(0, 10) : undefined;
+  return { ...rest, ...(addedAt ? { addedAt } : {}), strength: d.strength, signal: d.signal, included: d.included };
 }
 
 export function errorResponse(e: unknown, status = 400) {

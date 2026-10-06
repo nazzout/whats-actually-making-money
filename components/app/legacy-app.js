@@ -505,12 +505,14 @@ function fillFilters(){
   $("#q").addEventListener("input",renderBoard);
   $("#legend").innerHTML=OPT.aiRole.map(r=>`<span style="--c:${ROLE_C[r]}">${roleName(r)}</span>`).join("");
 }
-function filtered(){const q=$("#q").value.trim().toLowerCase(),i=$("#fInd")?.value||"",r=$("#fRole").value,g=$("#fDig").value,f=$("#fForm").value;return items.filter(d=>(!q||[d.name,...(d.tags||[])].join(" ").toLowerCase().includes(q))&&(!i||d.industry===i)&&(!r||d.aiRole===r)&&(!g||d.digital===g)&&(!f||d.form===f))}
+function filtered(){const q=$("#q").value.trim().toLowerCase(),i=$("#fInd")?.value||"",r=$("#fRole").value,g=$("#fDig").value,f=$("#fForm").value;return items.filter(d=>(!q||[d.name,...(d.tags||[])].join(" ").toLowerCase().includes(q))&&(!i||d.industry===i)&&(!r||d.aiRole===r)&&(!g||d.digital===g)&&(!f||d.form===f)&&(!chip||CHIPS[chip][1](d)))}
+// Header totals as one row of chips. Tapping one filters the list; tapping it again clears it.
+let chip="";
+const CHIPS={verified:["profit verified",d=>profitState(d)==="verified"],solid:["solid evidence",d=>d.confidence>=3],watch:["watchlist",d=>!d.included]};
 function renderStats(){const el=$("#stats");if(!el)return;if(!items.length){el.innerHTML="";return}
-  const top=[...items].filter(d=>d.included).sort((a,b)=>b.signal-a.signal)[0],ver=items.filter(d=>profitState(d)==="verified").length,watch=items.filter(d=>!d.included).length,trusted=items.filter(d=>d.confidence>=3).length;
-  const st=(k,v,sub)=>`<div class="stat"><span class="k">${k}</span><b>${v}</b><span class="s">${sub}</span></div>`;
-  el.innerHTML=st("Top signal",top?esc(top.name):"None yet",top?`Signal ${top.signal}`:"")+st("Profit verified",ver,`of ${items.length} companies`)+st("Solid evidence",trusted,"filings, results or reputable press")+st("Watchlist",watch,"not enough proof yet")}
-function renderBoard(){renderStats();const l=filtered();renderPlot(l);renderCohort(l);renderRows(l);$("#count").textContent=items.length?`${l.length} of ${items.length} shown`:""}
+  const b=(k,n,l)=>`<button type="button" class="schip" data-chip="${k}" aria-pressed="${chip===k}"><b>${n}</b> ${l}</button>`;
+  el.innerHTML=b("",items.length,"tracked")+Object.entries(CHIPS).map(([k,[l,fn]])=>b(k,items.filter(fn).length,l)).join("")}
+function renderBoard(){renderStats();syncFilt();const l=filtered();renderPlot(l);renderCohort(l);renderRows(l);$("#count").textContent=items.length?`${l.length} of ${items.length} shown`:""}
 function renderPlot(list){
   const W2=640,H2=420,L=44,R=16,T=30,B=40,pw=W2-L-R,ph=H2-T-B,x=v=>L+v/25*pw,y=v=>T+ph-v/5*ph;
   let g=`<rect x="${x(12)}" y="${y(5)}" width="${x(25)-x(12)}" height="${y(3)-y(5)}" fill="var(--zone-good)"/><rect x="${x(12)}" y="${y(2.5)}" width="${x(25)-x(12)}" height="${y(0)-y(2.5)}" fill="var(--zone-hype)"/>
@@ -546,15 +548,38 @@ function renderCohort(list){
     return `<div><div class="gname">${esc(groupKey==="aiRole"?roleName(k):k)}<small>${g.length} ${g.length===1?"company":"companies"}</small></div><div class="mbar"><span>Strength</span><div class="track"><div class="fill" style="width:${ms/25*100}%;background:var(--strength)"></div></div><span>${ms.toFixed(1)}</span></div><div class="mbar"><span>Trust</span><div class="track"><div class="fill" style="width:${mc/5*100}%;background:var(--trust)"></div></div><span>${mc.toFixed(1)}</span></div></div>`}).join(""):`<div class="empty">No companies match these filters.</div>`;
 }
 function renderRows(list){
-  const el=$("#rows"); if(!db)return;
+  const el=$("#rows"),pod=$("#podium"); pod.hidden=true;pod.innerHTML=""; if(!db)return;
   if(!items.length){el.innerHTML=`<div class="empty">No companies yet. ${canWrite?"Add one, or send a research batch through the agent API.":"Ask the owner to add companies."}</div>`;return}
   const s=[...list].sort((a,b)=>sortKey==="name"?(a.name||"").localeCompare(b.name||""):(b[sortKey]-a[sortKey])||(b.signal-a.signal));
   if(!s.length){el.innerHTML=`<div class="empty">No companies match these filters. Clear the search or filters to see everything.</div>`;return}
-  el.innerHTML=s.map(d=>`<div class="row" tabindex="0" role="button" data-id="${esc(d.id)}"><div class="nm">${icoHTML(d,"ico ico-s")}<div style="min-width:0">${esc(d.name)}<small>${esc(d.form||"")}${d.customer?" for "+esc(d.customer):""}</small></div></div><div class="c-role"><span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></div><div class="c-conf"><span class="bpips" aria-label="Trust ${d.confidence} of 5">${[1,2,3,4,5].map(i=>`<i class="${i<=d.confidence?"on":""}"></i>`).join("")}</span><small class="tw">${esc(TRUST_WORD[d.confidence])}</small></div><div class="c-str"><div class="sbar"><div class="track"><div class="fill" style="width:${d.strength/25*100}%;background:var(--strength)"></div></div><span>${d.strength}</span></div></div><div class="sigc">${d.included?`<div class="sig">${d.signal}</div>`:`<span class="watch">Watchlist</span>`}</div><div class="meta"><span>${esc(roleName(d.aiRole))}</span><span>Trust ${d.confidence}/5</span><span>Strength ${d.strength}/25</span></div></div>`).join("");
+  // Global rank by signal (watchlist entries are unranked), so numbers stay put when filtering.
+  const rk=new Map(items.filter(d=>d.included).sort((a,b)=>b.signal-a.signal).map((d,i)=>[d.id,i+1]));
+  // Podium: the top 3 on the plain ranking only. The list then continues from #4 so nothing repeats.
+  const top=sortKey==="signal"&&list.length===items.length?s.filter(d=>d.included).slice(0,3):[];
+  if(top.length===3){pod.hidden=false;pod.innerHTML=top.map(d=>`<button type="button" class="pod" data-id="${esc(d.id)}"><span class="pr">#${rk.get(d.id)}</span>${icoHTML(d,"ico")}<span class="pn">${esc(d.name)}</span><span class="ps">${d.signal}</span><span class="pl">Signal</span></button>`).join("");
+    pod.querySelectorAll(".pod").forEach(b=>b.addEventListener("click",()=>openDetail(b.dataset.id)))}
+  const rest=top.length===3?s.filter(d=>!top.includes(d)):s;
+  el.innerHTML=rest.map(d=>`<div class="row" tabindex="0" role="button" data-id="${esc(d.id)}"><div class="nm"><span class="rk">${rk.get(d.id)||"–"}</span>${icoHTML(d,"ico ico-s")}<div style="min-width:0">${esc(d.name)}<small>${esc(d.form||"")}${d.customer?" for "+esc(d.customer):""}${markHTML(d)}</small></div></div><div class="c-role"><span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></div><div class="c-conf"><span class="bpips" aria-label="Trust ${d.confidence} of 5">${[1,2,3,4,5].map(i=>`<i class="${i<=d.confidence?"on":""}"></i>`).join("")}</span><small class="tw">${esc(TRUST_WORD[d.confidence])}</small></div><div class="c-str"><div class="sbar"><div class="track"><div class="fill" style="width:${d.strength/25*100}%;background:var(--strength)"></div></div><span>${d.strength}</span></div></div><div class="sigc">${d.included?`<div class="sig">${d.signal}</div>`:`<span class="watch">Watchlist</span>`}</div><div class="meta"><span>${esc(roleName(d.aiRole))}</span><span>Trust ${d.confidence}/5</span><span>Strength ${d.strength}/25</span></div></div>`).join("");
   el.querySelectorAll(".row").forEach(r=>{r.addEventListener("click",()=>openDetail(r.dataset.id));r.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();openDetail(r.dataset.id)}})});
 }
 $("#lhead").addEventListener("click",e=>{const b=e.target.closest("[data-sort]");if(!b)return;sortKey=b.dataset.sort;document.querySelectorAll("[data-sort]").forEach(x=>x.removeAttribute("aria-sort"));b.setAttribute("aria-sort","descending");renderBoard()});
 $("#seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;groupKey=b.dataset.k;$("#seg").querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b));renderBoard()});
+// One quiet marker: "New" for companies added in the last 14 days. (No "updated" marker: background re-checks touch
+// most records daily, so it would show on nearly every row.)
+const isNewCo=d=>{const t=Date.parse(d.addedAt||"");return Number.isFinite(t)&&Date.now()-t<14*864e5};
+const markHTML=d=>isNewCo(d)?`<span class="mk new">New</span>`:"";
+$("#stats").addEventListener("click",e=>{const c=e.target.closest("[data-chip]");if(!c)return;const k=c.dataset.chip;chip=chip===k?"":k;renderBoard()});
+// Mobile filters: the four dropdowns live in a bottom sheet behind one button that shows how many are set.
+const FILT_IDS=["fInd","fRole","fDig","fForm"];
+function syncFilt(){const b=$("#filtBtn");if(!b)return;const n=FILT_IDS.filter(id=>$("#"+id)?.value).length;b.innerHTML=`Filters${n?` <span class="fn">${n}</span>`:""}`}
+const setFilt=o=>{$("#toolbar").classList.toggle("open",o);$("#filtBtn").setAttribute("aria-expanded",String(o))};
+$("#filtBtn").addEventListener("click",()=>setFilt(!$("#toolbar").classList.contains("open")));
+$("#fDone").addEventListener("click",()=>setFilt(false));
+$("#fClear").addEventListener("click",()=>{FILT_IDS.forEach(id=>{const el=$("#"+id);if(el)el.value=""});renderBoard()});
+document.addEventListener("pointerdown",e=>{if($("#toolbar").classList.contains("open")&&!e.target.closest("#toolbar"))setFilt(false)});
+// The search/filter bar sticks just under the floating nav.
+const setNavH=()=>{const n=$(".nav");if(n)document.documentElement.style.setProperty("--navh",Math.round(n.getBoundingClientRect().bottom)+"px")};
+addEventListener("resize",setNavH);setNavH();
 
 /* ---------- sheet: detail + form ---------- */
 let lastFocus=null;
