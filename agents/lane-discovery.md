@@ -13,7 +13,8 @@ Your lane name, focus and limits are given at the end of this prompt.
    - Games: Steam top sellers and new releases with breakout reviews, Game Developer, GamesRadar and analyst estimates (Gamalytic, VG Insights, Alinea)
    - Services and agencies: Adweek, Ad Age, Campaign, agency growth rankings, Promethean Research benchmarks
    - Physical products and hardware: Modern Retail, Kickstarter, DTC reporting
-   - Everything: earnings and filings, acquisition announcements, The Information, Indie Hackers and Product Hunt revenue posts, creator economy reporting
+   - Everything: earnings and filings, acquisition announcements, The Information, creator economy reporting
+   - Demand signals (finding only, see the standard): Reddit (r/SaaS, r/startups, r/Entrepreneur, r/gamedev, r/indiegaming, niche industry subreddits), Hacker News, Product Hunt, Indie Hackers, TikTok and YouTube creator buzz, Google Trends, store-ranking jumps. A candidate found here needs a stronger source before it is `qualified`.
 3. For each promising business, call `propose_candidate` with:
    - the official website (store page for games)
    - entityType and parentCompany when it is a product owned by another company

@@ -11,6 +11,9 @@ What Makes Money (whatmakesmoney.io) is a live map of what is actually making mo
 6. Direct company financial disclosures
 7. Founder interviews or social posts
 
+## Demand signals: discovery only
+Reddit, Hacker News, Product Hunt, Indie Hackers, TikTok, YouTube, X, Instagram, LinkedIn, Discord, Google Trends and store-ranking movement are where you find things, not proof that they make money. Use them to spot candidates and momentum. Never let them raise trust: a figure posted there is at most a `Founder post` or `Company-reported`, always `selfReported: true`, and never on its own a reason to mark a candidate `qualified`. Look for a stronger source behind it. The site's validators reject anything else.
+
 ## Never
 - Present funding, valuation, downloads, users, GMV, gross consumer spend, units, transaction volume or app-store gross as company revenue.
 - Present ARR or run-rate as trailing revenue, or ARR as profit. Use type `ARR` or `Annualized run-rate`.

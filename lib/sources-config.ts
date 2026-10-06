@@ -26,6 +26,29 @@ export const ANALYTICS = [
   "sacra.com",
 ];
 
+// Community, social and trend sources. Good for discovery and momentum, never evidence of revenue on their own.
+// A founder posting their own figures here is at most a Founder post (trust 1, self-reported); nothing higher.
+export const DEMAND_SIGNALS = [
+  "reddit.com",
+  "redd.it",
+  "news.ycombinator.com",
+  "producthunt.com",
+  "indiehackers.com",
+  "tiktok.com",
+  "youtube.com",
+  "youtu.be",
+  "trends.google.com",
+  "x.com",
+  "twitter.com",
+  "instagram.com",
+  "threads.net",
+  "linkedin.com",
+  "discord.com",
+  "discord.gg",
+];
+// Tiers a demand-signal link may carry.
+export const DEMAND_SIGNAL_TIERS = ["Founder post", "Company-reported"];
+
 // Hosts that usually sit behind a login or paywall (section 13). Not fetched automatically.
 export const PAYWALLED = ["theinformation.com", "sacra.com", "pitchbook.com", "wsj.com", "ft.com", "bloomberg.com"];
 

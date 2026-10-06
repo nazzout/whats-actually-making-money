@@ -98,6 +98,12 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .t-metric.liquid{color:#FFFFFF;background:#0A6B30;border-color:rgba(255,255,255,.14);text-shadow:0 1px 2px rgba(0,0,0,.28)}
 .t-metric.liquid .lbl{opacity:.88}
 .t-metric.liquid > canvas.lq{position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none;border-radius:inherit}
+/* iOS: the live canvas sits on its own GPU layer. Keep the card, canvas and text on permanent layers so taps and drags
+   never rebuild them mid-animation (a rebuild can paint the canvas over the text for a frame, which reads as a flash). */
+.t-metric.liquid{will-change:transform,scale;-webkit-backface-visibility:hidden;backface-visibility:hidden}
+.t-metric.liquid > canvas.lq,.t-metric.liquid > :not(canvas){transform:translateZ(0)}
+/* Touch screens keep :hover after a tap, which left tiles stuck enlarged and re-ran the scale animation. */
+@media (hover:none){.item > .tile:hover,.item > .tile:focus-visible,.item > .tile-ico:hover,.item > .tile-ico:focus-visible{scale:1}}
 .t-score{background:var(--paper);color:var(--paper-ink);border-color:var(--paper);height:150px;display:flex;flex-direction:column;justify-content:space-between}
 .t-score .who{font-weight:700;font-size:15px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item > .t-score{width:calc(100% - 44px);height:114px;margin:18px 22px;padding:13px 15px;border-radius:16px}
@@ -124,8 +130,9 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .pill[aria-pressed="true"]{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 
 .hint{position:absolute;left:20px;bottom:calc(env(safe-area-inset-bottom,0px) + 26px);color:var(--muted);font-size:12.5px;z-index:5;pointer-events:none;max-width:22ch;line-height:1.35}
-.layer{position:absolute;inset:0;transform-origin:50% 50%;transition:transform .6s var(--spring)}
-.field.dragging .layer{transform:scale(.955)}
+.layer{position:absolute;inset:0;transform-origin:50% 50%;transform:scale(var(--z,1));transition:transform .6s var(--spring)}
+.field.dragging .layer{transform:scale(calc(var(--z,1) * .955))}
+.field.pinching .layer{transition:none}
 .ask{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);width:min(680px,calc(100% - 24px));z-index:10}
 .answer{background:var(--tile);color:var(--tile-ink);border-radius:22px;padding:16px 18px;margin-bottom:10px;border:1px solid var(--tile-line);box-shadow:0 24px 60px -20px rgba(0,0,0,.9);transform-origin:bottom center;animation:pop .45s var(--spring)}
 @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
@@ -141,6 +148,14 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .askbar button{border:0;background:#FFFFFF;color:#0A0A0A;border-radius:999px;padding:11px 20px;font-weight:700;cursor:pointer;white-space:nowrap}
 .askbar button:disabled{opacity:.5}
 .askpanel{background:rgba(21,21,21,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--tile-line);border-radius:22px;padding:16px 18px 6px;margin-bottom:10px;box-shadow:0 30px 70px -24px rgba(0,0,0,.95);transform-origin:bottom center;animation:pop .45s var(--spring);max-height:min(56vh,440px);overflow:auto}
+/* Never taller than the visible screen (minus the search bar and some breathing room); scroll inside instead. */
+.askpanel{max-height:min(56vh,440px,calc(var(--vvh,100vh) - 120px - env(safe-area-inset-top,0px)));overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+/* Keyboard open: lift the search bar to sit just above the keyboard, and let the panel use the visible space above it. */
+body.kb-open .ask{bottom:calc(var(--kb,0px) + 10px)}
+/* While typing, fade the floating nav so it does not sit over the top of the panel. */
+.nav{transition:opacity .2s}
+body.kb-open .nav{opacity:0;pointer-events:none}
+body.kb-open .askpanel{max-height:min(440px,calc(var(--vvh,100vh) - 104px))}
 .askpanel .about{margin:0 0 14px;color:#C9C9C9;font-size:14px;max-width:60ch}
 .askpanel h5{margin:0 0 8px;font-size:12.5px;font-weight:600;color:var(--muted)}
 .askpanel .grp{margin-bottom:14px}
@@ -161,6 +176,8 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .toolbar input,.toolbar select{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 15px}
 .toolbar input{flex:1 1 200px;min-width:0}
+@media (max-width:860px){.toolbar input,.toolbar select{font-size:16px}}
+@media (max-width:480px){.askbar input{font-size:16px}}
 .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px;align-items:start}
 @media (max-width:860px){.grid{grid-template-columns:1fr}}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:20px}
@@ -363,6 +380,8 @@ body.board-mode .tabs a[aria-current="page"]{background:#0A0A0A;color:#FFFFFF}
 #board .grid{margin-top:28px}
 #board .list{border-top:1px solid var(--line)}
 #board .lhead,#board .row{grid-template-columns:minmax(0,2.2fr) 1fr 1.5fr 1.4fr 80px;padding:14px 4px}
+/* Mobile: name fills the row with the signal pinned right, details on one line underneath. Needs #board specificity to beat the desktop columns above. */
+@media (max-width:760px){#board .row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"nm sig" "meta meta";row-gap:6px}#board .row .meta{gap:6px 14px}}
 #board .row:hover{background:var(--soft)}
 #board .row .nm{font-size:15.5px}
 #board .row .ico-s{background:var(--soft);color:var(--ink)}

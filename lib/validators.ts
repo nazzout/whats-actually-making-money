@@ -1,6 +1,6 @@
 import type { Company, Evidence } from "./schema";
 import { relDiff, textHasFigure } from "./amount";
-import { ANALYTICS, FILING_DOMAINS, PAYWALLED, REPUTABLE_PRESS, hostOf, isCompanyIR, onList } from "./sources-config";
+import { ANALYTICS, DEMAND_SIGNALS, DEMAND_SIGNAL_TIERS, FILING_DOMAINS, PAYWALLED, REPUTABLE_PRESS, hostOf, isCompanyIR, onList } from "./sources-config";
 
 export type Level = "pass" | "warn" | "fail";
 export type CheckResult = { rule: string; level: Level; message: string; evidence?: number };
@@ -54,6 +54,13 @@ export function evidenceRules(list: Evidence[], indexes: number[]): CheckResult[
         out.push({ rule: "tier-domain", level: "warn", evidence: i, message: `${tag}: ${host} is not on the reputable press list in section 3.` });
       if (e.tier === "Third-party analytics" && !onList(host, ANALYTICS))
         out.push({ rule: "tier-domain", level: "warn", evidence: i, message: `${tag}: ${host} is not a known analytics source; it may be a secondary write-up.` });
+      // Reddit, HN, Product Hunt, TikTok, YouTube, trends and the like can never raise trust on their own.
+      if (onList(host, DEMAND_SIGNALS)) {
+        if (!DEMAND_SIGNAL_TIERS.includes(e.tier))
+          out.push({ rule: "demand-signal", level: "fail", evidence: i, message: `${tag}: ${host} is a community or social source. It can be a Founder post or Company-reported at most, never ${e.tier}.` });
+        else if (!e.selfReported)
+          out.push({ rule: "demand-signal", level: "fail", evidence: i, message: `${tag}: a figure from ${host} must be marked self-reported.` });
+      }
     }
   }
   return out;

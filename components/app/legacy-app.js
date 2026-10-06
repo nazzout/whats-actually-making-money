@@ -52,10 +52,13 @@ function route(){
   document.body.classList.toggle("board-mode",board);
   const on=board?$("#tabBoard"):$("#tabExplore"), off=board?$("#tabExplore"):$("#tabBoard");
   on.setAttribute("aria-current","page"); off.removeAttribute("aria-current");
-  if(!board) requestAnimationFrame(()=>{buildField();});
+  if(!board){document.activeElement?.blur?.();requestAnimationFrame(()=>{buildField();});}
   window.scrollTo(0,0);
 }
 addEventListener("hashchange",route);
+// iOS Safari ignores user-scalable=no, so block pinch gestures directly.
+["gesturestart","gesturechange","gestureend"].forEach(t=>document.addEventListener(t,e=>e.preventDefault(),{passive:false}));
+document.addEventListener("touchmove",e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
 
 /* ---------- liquid green: AI metric cards ---------- */
 const Liquid=(()=>{
@@ -224,6 +227,9 @@ const Wind=(()=>{
 const field=$("#field");
 let nodes=[],W=0,H=0,ox=0,oy=0,vx=0,vy=0,raf=null,drag=null,moved=false,idle=!reduce;
 const COLW=228,CELLH=228,SHORTH=150,GAP=40,PITCH=COLW+GAP,PY=CELLH+GAP;
+// Pinch-to-zoom on touch devices (phones, iPads). Mouse-only desktops stay at 1x.
+const ZOOM_ON=navigator.maxTouchPoints>0||matchMedia("(any-pointer:coarse)").matches,ZMIN=ZOOM_ON?.5:1,ZMAX=ZOOM_ON?1.5:1;
+let zoom=1,pinch=null,VW=0,VH=0;const touches=new Map();
 let GH=PY*2;
 let lastOx=0,lastOy=0,blurOn=false,bx0=0,by0=0;
 const mbG=document.getElementById("mblurG");
@@ -266,7 +272,9 @@ function buildField(){
   // Even block rows: [icon][name] / [metric][score]. Odd block rows: [name][icon] / [score][metric].
   // Tall rows and short rows alternate, so two icons never touch.
   const BH=CELLH+SHORTH+GAP*2,piles=pileDefs();
-  const bc=Math.max(2,Math.ceil((vw+PITCH*3)/(2*PITCH))), br=Math.max(2,Math.ceil((vh+BH*2)/BH));
+  VW=vw;VH=vh;
+  // Build enough tiles to fill the screen at the most zoomed-out level.
+  const bc=Math.max(2,Math.ceil((vw/ZMIN+PITCH*3)/(2*PITCH))), br=Math.max(2,Math.ceil((vh/ZMIN+BH*2)/BH));
   W=bc*2*PITCH; GH=br*BH;
   const html=[];nodes=[];let gi=0;
   const put=(col,y,inner,ids,pills,wide,h)=>{nodes.push({bx:col*PITCH,by:y,ids,pills,mx:wide?PITCH*2:PITCH,my:(h||CELLH)+GAP});html.push(`<div class="item${wide?" wide":""}">${inner}</div>`)};
@@ -290,9 +298,11 @@ function buildField(){
   if(!raf) raf=requestAnimationFrame(loop);
 }
 const mod=(n,m)=>((n%m)+m)%m;
-function paint(){const X=ox+aim.ax,Y=oy+aim.ay;for(const n of nodes){const x=mod(n.bx+X+n.mx,W)-n.mx,y=mod(n.by+Y+n.my,GH)-n.my;n.el.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`}}
+// The layer scales around the screen centre, so shift the wrap window to cover the wider visible area when zoomed out.
+function paint(){const X=ox+aim.ax,Y=oy+aim.ay,px=VW/2*(1/zoom-1),py=VH/2*(1/zoom-1);for(const n of nodes){const x=mod(n.bx+X+n.mx+px,W)-n.mx-px,y=mod(n.by+Y+n.my+py,GH)-n.my-py;n.el.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`}}
 function motionBlur(){
-  if(reduce)return;
+  // Skipped on touch devices: iOS renders SVG filters in software, and toggling one over live canvases makes their text flash.
+  if(reduce||ZOOM_ON)return;
   const dx=ox-lastOx,dy=oy-lastOy;lastOx=ox;lastOy=oy;
   const bxv=Math.min(10,Math.max(0,Math.abs(dx)-4)*.26),byv=Math.min(10,Math.max(0,Math.abs(dy)-4)*.26);
   bx0+=(bxv-bx0)*.45;by0+=(byv-by0)*.45;
@@ -324,14 +334,52 @@ function loop(){
   motionBlur();
   if(!$("#explore").hidden) raf=requestAnimationFrame(loop);
 }
-field.addEventListener("pointerdown",e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,id:e.pointerId};moved=false;idle=false;vx=vy=0});
-field.addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.abs(dx)+Math.abs(dy)>5){moved=true;field.classList.add("dragging");try{field.setPointerCapture(drag.id)}catch{}}if(moved){ox+=dx;oy+=dy;vx=dx;vy=dy;drag.x=e.clientX;drag.y=e.clientY;paint()}});
-field.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"&&!reduce){const r=field.getBoundingClientRect();aim.on=true;aim.x=e.clientX-r.left;aim.y=e.clientY-r.top;aim.overTarget=!!e.target.closest("[data-id],[data-pill]");if(!raf)raf=requestAnimationFrame(loop)}if(drag&&moved)return;Wind.blow(e);const c=e.target.closest(".liquid");if(c)Liquid.stir(c,e)});
+const setZoom=z=>{zoom=Math.min(ZMAX,Math.max(ZMIN,z));field.style.setProperty("--z",zoom)};
+const pinchState=()=>{const [a,b]=[...touches.values()];return {d:Math.hypot(b.x-a.x,b.y-a.y)||1,mx:(a.x+b.x)/2,my:(a.y+b.y)/2}};
+if(ZOOM_ON){
+  // Safari fallback: iOS reports pinches as gesture events with a scale. Used whenever the pointer-event pinch is not active.
+  let gz=null;
+  const gxy=e=>({x:Number.isFinite(e.clientX)?e.clientX:VW/2,y:Number.isFinite(e.clientY)?e.clientY:VH/2});
+  field.addEventListener("gesturestart",e=>{e.preventDefault();const p=gxy(e);gz={base:zoom,x:p.x,y:p.y};idle=false;vx=vy=0});
+  field.addEventListener("gesturechange",e=>{e.preventDefault();if(!gz)return;const p=gxy(e);
+    if(pinch){gz.base=zoom/(e.scale||1);gz.x=p.x;gz.y=p.y;return}
+    const z0=zoom,cx=VW/2,cy=VH/2;setZoom(gz.base*(e.scale||1));field.classList.add("pinching");
+    ox+=(p.x-cx)/zoom-(gz.x-cx)/z0;oy+=(p.y-cy)/zoom-(gz.y-cy)/z0;gz.x=p.x;gz.y=p.y;drag=null;moved=true;paint()});
+  field.addEventListener("gestureend",e=>{e.preventDefault();gz=null;if(!pinch)field.classList.remove("pinching")});
+  // Stop the browser from treating a two-finger move as page zoom or scroll.
+  field.addEventListener("touchmove",e=>{if(e.touches.length>1)e.preventDefault()},{passive:false});
+}
+field.addEventListener("pointerdown",e=>{
+  if(ZOOM_ON&&e.pointerType==="touch"){
+    touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(touches.size===2){const s=pinchState();pinch={d:s.d,z:zoom,mx:s.mx,my:s.my};drag=null;moved=true;idle=false;vx=vy=0;field.classList.remove("dragging");field.classList.add("pinching");return}
+    if(touches.size>2)return;
+  }
+  if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,id:e.pointerId};moved=false;idle=false;vx=vy=0});
+field.addEventListener("pointermove",e=>{
+  if(touches.has(e.pointerId))touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch){
+    if(touches.size<2)return;
+    // Zoom by finger spread, keeping the content under the fingers' midpoint pinned (and panning with it).
+    const s=pinchState(),z0=zoom,cx=VW/2,cy=VH/2;setZoom(pinch.z*s.d/pinch.d);
+    ox+=(s.mx-cx)/zoom-(pinch.mx-cx)/z0;oy+=(s.my-cy)/zoom-(pinch.my-cy)/z0;pinch.mx=s.mx;pinch.my=s.my;paint();return;
+  }
+  if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.abs(dx)+Math.abs(dy)>5){moved=true;field.classList.add("dragging");try{field.setPointerCapture(drag.id)}catch{}}if(moved){ox+=dx/zoom;oy+=dy/zoom;vx=dx/zoom;vy=dy/zoom;drag.x=e.clientX;drag.y=e.clientY;paint()}});
+field.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"&&!reduce){const r=field.getBoundingClientRect();aim.on=true;aim.x=e.clientX-r.left;aim.y=e.clientY-r.top;aim.overTarget=!!e.target.closest("[data-id],[data-pill]");if(!raf)raf=requestAnimationFrame(loop)}if(pinch||(drag&&moved))return;Wind.blow(e);const c=e.target.closest(".liquid");if(c)Liquid.stir(c,e)});
 field.addEventListener("pointerleave",()=>{aim.on=false});
 field.addEventListener("pointerover",e=>{const c=e.target.closest(".t-metric.volt");if(c&&!c.contains(e.relatedTarget))playDoodle(c)});addEventListener("blur",()=>{aim.on=false});
-const endDrag=e=>{if(!drag)return;drag=null;field.classList.remove("dragging");if(!raf)raf=requestAnimationFrame(loop)};
+const endDrag=e=>{
+  touches.delete(e.pointerId);
+  if(pinch){
+    if(touches.size<2){pinch=null;field.classList.remove("pinching");drag=null;
+      // One finger still down: carry on panning with it.
+      if(touches.size===1){const [[id,p]]=[...touches];drag={x:p.x,y:p.y,id}}
+      if(!raf)raf=requestAnimationFrame(loop)}
+    return;
+  }
+  if(!drag)return;drag=null;field.classList.remove("dragging");if(!raf)raf=requestAnimationFrame(loop)};
 field.addEventListener("pointerup",endDrag);field.addEventListener("pointercancel",endDrag);
-field.addEventListener("wheel",e=>{e.preventDefault();idle=false;ox-=e.deltaX;oy-=e.deltaY;vx=-e.deltaX*.2;vy=-e.deltaY*.2;paint();if(!raf)raf=requestAnimationFrame(loop)},{passive:false});
+field.addEventListener("wheel",e=>{e.preventDefault();idle=false;ox-=e.deltaX/zoom;oy-=e.deltaY/zoom;vx=-e.deltaX*.2/zoom;vy=-e.deltaY*.2/zoom;paint();if(!raf)raf=requestAnimationFrame(loop)},{passive:false});
 field.addEventListener("keydown",e=>{const m={ArrowLeft:[80,0],ArrowRight:[-80,0],ArrowUp:[0,80],ArrowDown:[0,-80]}[e.key];if(m&&e.target===field){e.preventDefault();idle=false;ox+=m[0];oy+=m[1];paint()}});
 field.addEventListener("click",e=>{
   if(moved){e.preventDefault();e.stopPropagation();moved=false;return}
@@ -367,6 +415,16 @@ function openPanel(){const pnl=$("#askPanel");if(!pnl.hidden)return;
   pnl.hidden=false;$("#answer").hidden=true;$("#askInput").setAttribute("aria-expanded","true")}
 function closePanel(){$("#askPanel").hidden=true;$("#answer").hidden=false;$("#askInput").setAttribute("aria-expanded","false")}
 $("#askInput").addEventListener("focus",openPanel);
+// iOS keyboard: the layout viewport keeps its full height while the visible area shrinks. Track the visible area so the
+// search bar sits just above the keyboard and the panel is capped to the space actually on screen (it scrolls inside).
+const vv=window.visualViewport;
+function fitAsk(){
+  if(!vv)return;
+  const lh=document.documentElement.clientHeight,kb=Math.max(0,Math.round(lh-vv.height-vv.offsetTop)),r=document.documentElement.style;
+  r.setProperty("--vvh",Math.round(vv.height)+"px");r.setProperty("--kb",kb+"px");
+  document.body.classList.toggle("kb-open",kb>80);
+}
+if(vv){vv.addEventListener("resize",fitAsk);vv.addEventListener("scroll",fitAsk);fitAsk()}
 $("#askInput").addEventListener("keydown",e=>{if(e.key==="Escape"){closePanel();e.target.blur()}});
 document.addEventListener("pointerdown",e=>{if(!$("#askPanel").hidden&&!e.target.closest(".ask"))closePanel()});
 $("#askForm").addEventListener("submit",e=>{e.preventDefault();const q=$("#askInput").value.trim();if(q){closePanel();ask(q)}});
