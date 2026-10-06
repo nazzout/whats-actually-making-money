@@ -21,7 +21,7 @@ export const maxDuration = 45;
 
 const VISITOR = "mm_vid";
 // Bump when a prompt changes so answers written under the old prompt are not served from cache.
-const PROMPT_VERSION = "3";
+const PROMPT_VERSION = "4";
 
 const BASE =
   "You answer questions for What Makes Money, a research dataset of businesses: their revenue, profitability, growth, business models, AI role and evidence quality. " +
@@ -44,7 +44,7 @@ const GUIDANCE_SYSTEM =
   "You may use web search for a quick market check only, such as competition, demand or pricing in a specific niche. Search only if it materially improves the answer. " +
   "Treat web figures as unverified context, never as verified revenue, and never present them as part of the dataset. " +
   "This is guidance, not a prediction of success: say what the evidence suggests and what it does not show. " +
-  "Answer in 3 to 5 short plain sentences of plain text, no lists, no headings, no markdown. " +
+  "Answer in at most 4 short plain sentences and under 110 words, plain text, no lists, no headings, no markdown. " +
   "If the question is not about businesses, products, industries or what to build, reply exactly OFF_TOPIC and nothing else.";
 
 const clean = (s: string) => s.replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/\s+/g, " ").trim();
@@ -132,6 +132,9 @@ export async function POST(req: Request) {
         ],
         // The search cap is enforced by the API inside this single request. There is no tool loop on our side.
         ...(mode === "guidance" && g.maxSearches > 0 ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: g.maxSearches }] } : {}),
+        // Sonnet 5.5 thinks before answering by default, and thinking spends the 250-token budget before any text.
+        // "between_tools" is this model's no-thinking setting.
+        ...(mode === "guidance" ? { thinking: { type: "between_tools" } } : {}),
         messages: [{ role: "user", content: `QUESTION: ${raw}` }],
       }),
       signal: AbortSignal.timeout(mode === "guidance" ? 40_000 : 15_000),
@@ -147,7 +150,12 @@ export async function POST(req: Request) {
 
   type Block = { type: string; text?: string; citations?: { url?: string; title?: string }[] };
   const blocks: Block[] = j.content || [];
-  const text = blocks.filter((b) => b.type === "text").map((b) => b.text || "").join("");
+  let text = blocks.filter((b) => b.type === "text").map((b) => b.text || "").join("");
+  // If the output cap cut the answer off, end it at the last complete sentence rather than mid-word.
+  if (j.stop_reason === "max_tokens" && mode === "guidance") {
+    const end = Math.max(text.lastIndexOf(". "), text.lastIndexOf(".\n"), text.endsWith(".") ? text.length - 1 : -1);
+    if (end > 40) text = text.slice(0, end + 1);
+  }
   let body: Record<string, unknown>;
 
   if (mode === "guidance") {
@@ -182,7 +190,8 @@ export async function POST(req: Request) {
     }
   }
 
-  await setCached(mode === "guidance" ? gid : did, body);
+  // An empty guidance result is a failure, not an answer: never cache it for a week.
+  if (!(mode === "guidance" && body.reason === "no_data")) await setCached(mode === "guidance" ? gid : did, body);
   await logAsk({
     q: raw,
     route: `${mode}_${body.reason || "answer"}${downgraded ? `_${downgraded}` : ""}`,
