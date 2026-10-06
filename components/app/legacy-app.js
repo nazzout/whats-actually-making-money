@@ -54,6 +54,8 @@ function route(){
   on.setAttribute("aria-current","page"); off.removeAttribute("aria-current");
   if(!board){document.activeElement?.blur?.();requestAnimationFrame(()=>{buildField();});}
   window.scrollTo(0,0);
+  // The nav is shorter on the board (no brand pill), so re-measure where the pinned search bar sits.
+  requestAnimationFrame(()=>{setNavH();updateDock();if(!board)requestAnimationFrame(pinExplore)});
 }
 addEventListener("hashchange",route);
 // iOS Safari ignores user-scalable=no, so block pinch gestures directly.
@@ -335,11 +337,12 @@ function loop(){
   if(!$("#explore").hidden) raf=requestAnimationFrame(loop);
 }
 const setZoom=z=>{zoom=Math.min(ZMAX,Math.max(ZMIN,z));field.style.setProperty("--z",zoom)};
-const pinchState=()=>{const [a,b]=[...touches.values()];return {d:Math.hypot(b.x-a.x,b.y-a.y)||1,mx:(a.x+b.x)/2,my:(a.y+b.y)/2}};
+// Midpoint in canvas coordinates (on phones the canvas starts above the screen top, under the status bar).
+const pinchState=()=>{const [a,b]=[...touches.values()],r=field.getBoundingClientRect();return {d:Math.hypot(b.x-a.x,b.y-a.y)||1,mx:(a.x+b.x)/2-r.left,my:(a.y+b.y)/2-r.top}};
 if(ZOOM_ON){
   // Safari fallback: iOS reports pinches as gesture events with a scale. Used whenever the pointer-event pinch is not active.
   let gz=null;
-  const gxy=e=>({x:Number.isFinite(e.clientX)?e.clientX:VW/2,y:Number.isFinite(e.clientY)?e.clientY:VH/2});
+  const gxy=e=>{const r=field.getBoundingClientRect();return {x:Number.isFinite(e.clientX)?e.clientX-r.left:VW/2,y:Number.isFinite(e.clientY)?e.clientY-r.top:VH/2}};
   field.addEventListener("gesturestart",e=>{e.preventDefault();const p=gxy(e);gz={base:zoom,x:p.x,y:p.y};idle=false;vx=vy=0});
   field.addEventListener("gesturechange",e=>{e.preventDefault();if(!gz)return;const p=gxy(e);
     if(pinch){gz.base=zoom/(e.scale||1);gz.x=p.x;gz.y=p.y;return}
@@ -572,14 +575,63 @@ $("#stats").addEventListener("click",e=>{const c=e.target.closest("[data-chip]")
 // Mobile filters: the four dropdowns live in a bottom sheet behind one button that shows how many are set.
 const FILT_IDS=["fInd","fRole","fDig","fForm"];
 function syncFilt(){const b=$("#filtBtn");if(!b)return;const n=FILT_IDS.filter(id=>$("#"+id)?.value).length;b.innerHTML=`Filters${n?` <span class="fn">${n}</span>`:""}`}
-const setFilt=o=>{$("#toolbar").classList.toggle("open",o);$("#filtBtn").setAttribute("aria-expanded",String(o))};
+const setFilt=o=>{$("#toolbar").classList.toggle("open",o);document.body.classList.toggle("filt-open",o);$("#filtBtn").setAttribute("aria-expanded",String(o))};
 $("#filtBtn").addEventListener("click",()=>setFilt(!$("#toolbar").classList.contains("open")));
 $("#fDone").addEventListener("click",()=>setFilt(false));
 $("#fClear").addEventListener("click",()=>{FILT_IDS.forEach(id=>{const el=$("#"+id);if(el)el.value=""});renderBoard()});
-document.addEventListener("pointerdown",e=>{if($("#toolbar").classList.contains("open")&&!e.target.closest("#toolbar"))setFilt(false)});
+// Tapping outside the Filters sheet only closes it: the tap must not also open whatever row is underneath.
+document.addEventListener("pointerdown",e=>{if($("#toolbar").classList.contains("open")&&!e.target.closest("#toolbar,#fsheet")){setFilt(false);
+  const eat=ev=>{ev.preventDefault();ev.stopPropagation()};document.addEventListener("click",eat,{capture:true,once:true});setTimeout(()=>document.removeEventListener("click",eat,true),600)}});
 // The search/filter bar sticks just under the floating nav.
-const setNavH=()=>{const n=$(".nav");if(n)document.documentElement.style.setProperty("--navh",Math.round(n.getBoundingClientRect().bottom)+"px")};
+// On phones/iPads the nav box is display:contents (its pills are positioned individually), so measure the pills.
+const setNavH=()=>{const n=$(".nav");if(!n)return;let b=n.getBoundingClientRect().bottom;
+  if(getComputedStyle(n).display==="contents")b=Math.max(0,...[...n.children].map(c=>c.getBoundingClientRect().bottom))+14;
+  document.documentElement.style.setProperty("--navh",Math.round(b)+"px")};
 addEventListener("resize",setNavH);setNavH();
+// Phones + iPads: once the search/filter bar scrolls under the nav, it glides into a glass footer; scrolling back
+// up returns it. A spacer holds its place so the page doesn't jump, and a FLIP animation moves it between spots.
+const DOCK_MQ=matchMedia("(max-width:1024px), (hover:none) and (pointer:coarse)");
+const tbEl=$("#toolbar"),tbSpace=document.createElement("div");tbSpace.setAttribute("aria-hidden","true");tbEl.before(tbSpace);
+let docked=false,dockRaf=null,inlineH=0;
+let moveRaf=0;
+// Animate el from where it was to where change() puts it. If it was already off-screen (a fast scroll carried it away),
+// slide it up from the bottom edge instead of flying it across the whole screen.
+function flipMove(el,change,dockingNow){
+  cancelAnimationFrame(moveRaf);el.style.transition="none";el.style.transform="";el.style.opacity="";
+  const a=el.getBoundingClientRect();change();if(reduce)return;const b=el.getBoundingClientRect();
+  const offscreen=a.bottom<0||a.top>innerHeight;
+  el.style.transform=dockingNow&&offscreen?`translateY(${innerHeight-b.top}px)`:`translate(${a.left-b.left}px,${a.top-b.top}px)`;
+  if(dockingNow&&offscreen)el.style.opacity="0";
+  moveRaf=requestAnimationFrame(()=>{moveRaf=requestAnimationFrame(()=>{
+    el.style.transition="transform .5s var(--spring),opacity .25s ease";el.style.transform="";el.style.opacity="";
+    el.addEventListener("transitionend",e=>{if(e.propertyName==="transform")el.style.transition=""},{once:true});
+  })});
+}
+function updateDock(){
+  dockRaf=null;
+  const navh=parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--navh"))||84;
+  // Measure the bar's in-flow footprint while it's inline; the spacer's top never moves, so docking can't flicker.
+  if(!docked)inlineH=tbEl.offsetHeight; // its bottom margin collapses into the heading below, so it is not added
+  const want=DOCK_MQ.matches&&!$("#board").hidden&&tbSpace.getBoundingClientRect().top+inlineH<navh;
+  if(want===docked)return;
+  if(tbEl.classList.contains("open"))setFilt(false);
+  flipMove(tbEl,()=>{tbSpace.style.height=want?inlineH+"px":"";docked=want;tbEl.classList.toggle("docked",want)},want);
+}
+// The Explore/Board toggle sits in a wrapper that turns to glass once the page starts scrolling (styled on phones/iPads).
+{const t=$(".tabs");if(t&&!t.parentElement.classList.contains("tabwrap")){const w=document.createElement("div");w.className="tabwrap";t.before(w);w.appendChild(t)}}
+const setScrolled=()=>document.body.classList.toggle("scrolled",scrollY>8);
+addEventListener("scroll",()=>{setScrolled();if(!dockRaf)dockRaf=requestAnimationFrame(updateDock)},{passive:true});setScrolled();
+// On phones/iPads the Filters sheet lives in <body>, so the docked bar can carry its own blur (see globals.css).
+function placeFsheet(){const fs=$("#fsheet");if(!fs)return;const home=DOCK_MQ.matches?document.body:tbEl;if(fs.parentElement!==home)home.appendChild(fs)}
+placeFsheet();
+// Explore on phones/iPads: keep the page scrolled to the bottom so the canvas's extra top sits under the status bar.
+function pinExplore(){
+  if(!DOCK_MQ.matches||$("#explore").hidden||document.body.classList.contains("kb-open"))return;
+  const max=document.documentElement.scrollHeight-innerHeight;if(max>0&&Math.abs(scrollY-max)>1)scrollTo(0,max);
+}
+addEventListener("scroll",()=>{if(!$("#explore").hidden)pinExplore()},{passive:true});
+addEventListener("resize",()=>requestAnimationFrame(pinExplore));
+DOCK_MQ.addEventListener?.("change",()=>{placeFsheet();updateDock();pinExplore()});
 
 /* ---------- sheet: detail + form ---------- */
 let lastFocus=null;
