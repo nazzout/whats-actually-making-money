@@ -3,31 +3,51 @@ import { cookies } from "next/headers";
 import { listCompanies } from "@/lib/data";
 import { publicCompany } from "@/lib/public";
 import { datasetVersion } from "@/lib/version";
-import { ASK, MSG, cacheId, checkQuota, estimateCost, getCached, logAsk, normalize, scopeOf, setCached, spendQuota } from "@/lib/ask";
+import {
+  ASK, MSG, cacheId, checkQuota, estimateCost, estimateGuidanceCost, getCached, guidanceAllowed, isGuidance, logAsk, normalize, scopeOf, setCached, spendQuota,
+} from "@/lib/ask";
 
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 // Public "ask anything". A navigation and synthesis layer over the dataset, not a general chatbot.
 // Order matters: every cheap check runs before any model call.
-//   1. length   2. deterministic scope   3. cache (free, no quota)   4. rolling quota   5. model
+//   1. length   2. deterministic scope   3. cache (free, no quota)   4. rolling quota   5. one model call
+// Two modes, chosen by code, never by a model:
+//   dataset  - factual questions. Haiku, dataset only, no browsing.
+//   guidance - "what should I build / where is the opportunity". Sonnet, dataset first, plus a web check hard-capped
+//              by the API's max_uses inside ONE request. No loop, no fetches, short answer. Falls back to dataset mode
+//              when the guidance sub-cap is used up or the pre-flight cost estimate is over the per-question limit.
 // Every response is 200 with a `mode`, so the client can always fall back to keyword search.
-// mode: "ai" (model answer), "cached", "message" (fixed copy, show keyword results), "limit" (quota/paused).
 
 const VISITOR = "mm_vid";
-// Bump when SYSTEM changes so answers written under the old prompt are not served from cache.
-const PROMPT_VERSION = "2";
+// Bump when a prompt changes so answers written under the old prompt are not served from cache.
+const PROMPT_VERSION = "3";
 
-const SYSTEM =
+const BASE =
   "You answer questions for What Makes Money, a research dataset of businesses: their revenue, profitability, growth, business models, AI role and evidence quality. " +
   "Each company has a trust score (0 to 5, how reliable the financial evidence is) and a business strength score (0 to 25). included false means watchlist. " +
+  "Describe evidence by its exact tier. Only call a figure audited if its tier is Audited filing. A profitability note starting \"Verified loss\" is a verified loss, not profit. " +
+  "No jargon, no filler, no em dashes, do not repeat the question. Mention trust where it matters and state uncertainty directly. ";
+
+const DATASET_SYSTEM =
+  BASE +
   "Use only the DATA provided. Never add outside facts, never guess figures, never browse. " +
-  "Describe evidence by its exact tier. Only call a figure audited if its tier is Audited filing. Company financial statements, company-reported figures, press and estimates are not audited, so say what they are. " +
   "If the question is not about businesses, products, industries, business models, revenue, growth, pricing, distribution, AI role, momentum, comparisons, or what may be worth building, reply exactly {\"offTopic\":true}. " +
   "If the question is on topic but the DATA cannot answer it, reply exactly {\"insufficient\":true}. " +
-  "Otherwise answer in 2 to 5 short plain sentences. No jargon, no filler, no em dashes, do not repeat the question. Mention trust where it matters and state uncertainty directly. " +
+  "Otherwise answer in 2 to 5 short plain sentences. " +
   'Respond with JSON only, no markdown: {"ids":["matching company ids, most relevant first"],"answer":"..."}';
 
-const clean = (s: string) => s.replace(/\s*[\u2014\u2013]\s*/g, ", ").trim();
+const GUIDANCE_SYSTEM =
+  BASE +
+  "The user is asking what might be worth building, or where there is opportunity. Give grounded, practical guidance. " +
+  "The DATA is your primary evidence: point to the patterns it shows (business models, product forms, team size, distribution, what is verified versus claimed) and name the relevant companies. " +
+  "You may use web search for a quick market check only, such as competition, demand or pricing in a specific niche. Search only if it materially improves the answer. " +
+  "Treat web figures as unverified context, never as verified revenue, and never present them as part of the dataset. " +
+  "This is guidance, not a prediction of success: say what the evidence suggests and what it does not show. " +
+  "Answer in 3 to 5 short plain sentences of plain text, no lists, no headings, no markdown. " +
+  "If the question is not about businesses, products, industries or what to build, reply exactly OFF_TOPIC and nothing else.";
+
+const clean = (s: string) => s.replace(/\s*[\u2014\u2013]\s*/g, ", ").replace(/\s+/g, " ").trim();
 
 export async function POST(req: Request) {
   const key = process.env.ANTHROPIC_API_KEY;
@@ -47,10 +67,14 @@ export async function POST(req: Request) {
   }
   if (!key) return Response.json({ mode: "limit", reason: "disabled", answer: MSG.paused });
 
-  // 3. Cache by normalized question + dataset version. A hit costs nothing and uses no quota.
+  // 3. Cache by normalized question + dataset version + mode. A hit costs nothing and uses no quota.
+  // Guidance answers include a web check, so they expire after a few days even if the dataset has not changed.
+  const wantsGuidance = isGuidance(raw);
   const norm = normalize(raw);
-  const cid = cacheId(norm, `${datasetVersion(companies)}:p${PROMPT_VERSION}`);
-  const hit = await getCached(cid);
+  const version = `${datasetVersion(companies)}:p${PROMPT_VERSION}`;
+  const gid = cacheId(norm, `${version}:guidance`);
+  const did = cacheId(norm, version);
+  const hit = (wantsGuidance ? await getCached(gid, ASK.guidance.cacheDays * 864e5) : null) || (await getCached(did));
   if (hit) {
     await logAsk({ q: raw, route: "cache" });
     return Response.json({ ...hit, mode: hit.mode === "ai" ? "cached" : hit.mode });
@@ -74,7 +98,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // 5. One cheap model call, dataset only, strict output budget.
   const data = companies.map((d) => ({
     id: d.id, name: d.name, form: d.form, customer: d.customer, model: d.model, digital: d.digital, aiRole: d.aiRole,
     trust: d.confidence, strength: d.strength, signal: d.signal, included: d.included,
@@ -82,23 +105,36 @@ export async function POST(req: Request) {
     industry: d.industry, ecosystemRole: d.ecosystemRole, tags: d.tags, entityType: d.entityType, parentCompany: d.parentCompany,
     evidence: d.evidence.slice(0, 4).map((e) => ({ metric: e.metric, value: e.value, period: e.period, type: e.type, tier: e.tier, selfReported: e.selfReported })),
   }));
+  const dataText = `DATA: ${JSON.stringify(data)}`;
 
+  // 5. Pick the mode. Guidance only if the sub-cap allows it and the worst-case estimate is under the limit.
+  let mode: "dataset" | "guidance" = "dataset";
+  let downgraded = "";
+  if (wantsGuidance) {
+    if (!(await guidanceAllowed(visitor))) downgraded = "guidance_cap";
+    else if (estimateGuidanceCost(GUIDANCE_SYSTEM.length + dataText.length + raw.length) > ASK.guidance.maxUsd) downgraded = "guidance_cost";
+    else mode = "guidance";
+  }
+
+  const g = ASK.guidance;
   let r: Response;
   try {
     r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       body: JSON.stringify({
-        model: ASK.model,
-        max_tokens: ASK.maxTokens,
+        model: mode === "guidance" ? g.model : ASK.model,
+        max_tokens: mode === "guidance" ? g.maxTokens : ASK.maxTokens,
         system: [
-          { type: "text", text: SYSTEM },
+          { type: "text", text: mode === "guidance" ? GUIDANCE_SYSTEM : DATASET_SYSTEM },
           // Identical for every question until the dataset changes, so it is cached.
-          { type: "text", text: `DATA: ${JSON.stringify(data)}`, cache_control: { type: "ephemeral" } },
+          { type: "text", text: dataText, cache_control: { type: "ephemeral" } },
         ],
+        // The search cap is enforced by the API inside this single request. There is no tool loop on our side.
+        ...(mode === "guidance" && g.maxSearches > 0 ? { tools: [{ type: "web_search_20250305", name: "web_search", max_uses: g.maxSearches }] } : {}),
         messages: [{ role: "user", content: `QUESTION: ${raw}` }],
       }),
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(mode === "guidance" ? 40_000 : 15_000),
     });
   } catch {
     return Response.json({ mode: "limit", reason: "unavailable", answer: "AI answers are unavailable right now. Showing search results instead." });
@@ -106,26 +142,52 @@ export async function POST(req: Request) {
   if (!r.ok) return Response.json({ mode: "limit", reason: r.status === 429 ? "busy" : "unavailable", answer: "AI answers are busy right now. Showing search results instead." });
 
   const j = await r.json();
-  const usd = estimateCost(j.usage);
-  await spendQuota(visitor, ip);
+  const usd = estimateCost(j.usage, mode === "guidance" ? g.price : ASK.price);
+  await spendQuota(visitor, ip, mode === "guidance");
 
-  const text = (j.content || []).map((b: { text?: string }) => b.text || "").join("");
-  let parsed: { ids?: unknown; answer?: unknown; offTopic?: boolean; insufficient?: boolean } = {};
-  try {
-    parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  } catch {
-    /* falls through to the no-data message */
-  }
-
+  type Block = { type: string; text?: string; citations?: { url?: string; title?: string }[] };
+  const blocks: Block[] = j.content || [];
+  const text = blocks.filter((b) => b.type === "text").map((b) => b.text || "").join("");
   let body: Record<string, unknown>;
-  if (parsed.offTopic) body = { mode: "message", reason: "off_topic", answer: MSG.offTopic };
-  else if (parsed.insufficient || typeof parsed.answer !== "string" || !parsed.answer.trim()) body = { mode: "message", reason: "no_data", answer: MSG.noData };
-  else {
-    const ids = (Array.isArray(parsed.ids) ? parsed.ids : []).filter((id): id is string => typeof id === "string" && companies.some((c) => c.id === id));
-    body = { mode: "ai", answer: clean(parsed.answer), ids };
+
+  if (mode === "guidance") {
+    if (/^\s*OFF_TOPIC\s*$/.test(text)) body = { mode: "message", reason: "off_topic", answer: MSG.offTopic };
+    else if (!text.trim()) body = { mode: "message", reason: "no_data", answer: MSG.noData };
+    else {
+      // Companies named in the answer become clickable results; cited web pages are listed as sources.
+      const lower = text.toLowerCase();
+      const ids = companies.filter((c) => lower.includes(c.name.toLowerCase())).map((c) => c.id);
+      const seen = new Set<string>();
+      const sources: { url: string; title: string }[] = [];
+      for (const b of blocks)
+        for (const c of b.citations || [])
+          if (c.url && !seen.has(c.url) && sources.length < 3) {
+            seen.add(c.url);
+            sources.push({ url: c.url, title: c.title || new URL(c.url).hostname });
+          }
+      body = { mode: "ai", kind: "guidance", answer: clean(text), ids, sources };
+    }
+  } else {
+    let parsed: { ids?: unknown; answer?: unknown; offTopic?: boolean; insufficient?: boolean } = {};
+    try {
+      parsed = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    } catch {
+      /* falls through to the no-data message */
+    }
+    if (parsed.offTopic) body = { mode: "message", reason: "off_topic", answer: MSG.offTopic };
+    else if (parsed.insufficient || typeof parsed.answer !== "string" || !parsed.answer.trim()) body = { mode: "message", reason: "no_data", answer: MSG.noData };
+    else {
+      const ids = (Array.isArray(parsed.ids) ? parsed.ids : []).filter((id): id is string => typeof id === "string" && companies.some((c) => c.id === id));
+      body = { mode: "ai", kind: "dataset", answer: clean(parsed.answer), ids };
+    }
   }
 
-  await setCached(cid, body);
-  await logAsk({ q: raw, route: `model_${body.reason || "answer"}`, usd, usage: j.usage });
+  await setCached(mode === "guidance" ? gid : did, body);
+  await logAsk({
+    q: raw,
+    route: `${mode}_${body.reason || "answer"}${downgraded ? `_${downgraded}` : ""}`,
+    usd,
+    usage: j.usage,
+  });
   return Response.json({ ...body, remainingToday: Math.max(0, quota.remainingToday - 1) });
 }

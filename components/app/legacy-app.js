@@ -404,9 +404,11 @@ function applyHighlight(){
 }
 
 /* ---------- ask / search ---------- */
-function showAnswer(text,ids,source){
+function showAnswer(text,ids,source,sources){
   const hits=ids.map(id=>items.find(d=>d.id===id)).filter(Boolean);
-  $("#answer").innerHTML=`<div class="answer" role="status"><p>${esc(text)}</p>${hits.length?`<div class="hits">${hits.map(d=>`<button data-open="${esc(d.id)}">${esc(d.name)}</button>`).join("")}</div>`:""}<div class="meta"><span>${esc(source)}</span><button data-clear>Clear</button></div></div>`;
+  // Web sources from a market-guidance answer: shown separately so they are never mistaken for dataset evidence.
+  const web=(sources||[]).filter(s=>safeUrl(s.url));
+  $("#answer").innerHTML=`<div class="answer" role="status"><p>${esc(text)}</p>${hits.length?`<div class="hits">${hits.map(d=>`<button data-open="${esc(d.id)}">${esc(d.name)}</button>`).join("")}</div>`:""}${web.length?`<div class="web"><span>Web check (unverified):</span>${web.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)} ↗</a>`).join("")}</div>`:""}<div class="meta"><span>${esc(source)}</span><button data-clear>Clear</button></div></div>`;
 }
 $("#answer").addEventListener("click",e=>{const o=e.target.closest("[data-open]");if(o)openDetail(o.dataset.open);if(e.target.closest("[data-clear]")){clearHighlight();$("#askInput").value=""}});
 $("#sugs").addEventListener("click",e=>{const b=e.target.closest("button");if(b){$("#askInput").value=b.textContent;closePanel();ask(b.textContent)}});
@@ -488,7 +490,8 @@ async function ask(q){
       const ids=(Array.isArray(r.ids)?r.ids:[]).filter(id=>items.some(d=>d.id===id));
       if(ids.length)setHighlight(ids); else clearHighlight();
       const left=typeof r.remainingToday==="number"?` · ${r.remainingToday} AI ${r.remainingToday===1?"question":"questions"} left today`:"";
-      showAnswer(r.answer,ids,`AI answer from the dataset${left}`);
+      const label=r.kind==="guidance"?"Market guidance from the dataset plus a limited web check":"AI answer from the dataset";
+      showAnswer(r.answer,ids,`${label}${left}`,r.sources);
       return;
     }
     // Fixed messages and limits: show the message, then fall back to free search on the same input.
