@@ -1,7 +1,7 @@
 /* Ported verbatim from docs/legacy/making-money.html (handoff v2). */
 :root{
   --colw:228px;
-  --canvas:#0B0B0B; --on-canvas:#FFFFFF; --brand:#00D54B; --brand-bright:#21FB6F; --on-brand:#0A0A0A;
+  --canvas:#000000; --on-canvas:#FFFFFF; --brand:#00D54B; --brand-bright:#21FB6F; --on-brand:#0A0A0A;
   --tile:#171717; --volt:#D9FC51; --moss:#578A3A; --sea:#468358; --tide:#367285; --lime:#E6F26B; --peri:#9DAEFF; --chalk:#F4F4F0; --paper:#FFFFFF; --paper-ink:#111111; --paper-muted:#6E6E6E; --paper-track:#ECECEC; --cobalt:#1233C8; --cobalt-deep:#0B248E; --cobalt-line:#2B4BD8; --on-cobalt-muted:rgba(255,255,255,.72); --tile-ink:#F5F5F5; --tile-dark:#00D54B; --tile-muted:#9C9C9C; --tile-line:#262626;
   --bg:#0B0B0B; --panel:#151515; --ink:#F2F2F2; --muted:#9C9C9C; --line:#272727; --soft:#1F1F1F;
   --trust:#F2F2F2; --strength:#00D54B; --flag:#FF5CC6; --danger:#FF6B6B;
@@ -151,13 +151,13 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .answer .meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;font-size:12.5px;color:var(--tile-muted)}
 .answer .meta button{border:0;background:none;color:var(--brand);font-weight:600;cursor:pointer;padding:0}
 .answer .web{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:10px;font-size:12.5px;color:var(--tile-muted)}
+/* Thinking state: the dot strip fills the panel width; the status line sits under it. */
+.answer.thinking .think-dots{display:block;width:100%;height:44px}
+.answer.thinking .think-step{margin:8px 0 0;color:var(--tile-muted);font-size:14px}
 .answer .web a{color:var(--tile-ink);text-decoration:underline;text-underline-offset:2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .askbar{display:flex;align-items:center;gap:8px;background:var(--tile);border:1px solid #2E2E2E;border-radius:999px;padding:7px 7px 7px 20px;box-shadow:0 24px 60px -18px rgba(0,0,0,.95)}
 .askbar:focus-within{border-color:#FFFFFF}
 .askbar input{flex:1;border:0;background:none;outline:none;font-size:17px;color:var(--tile-ink);min-width:0;padding:8px 0}
-/* Thinking state: the dot strip fills the panel width; the status line sits under it. */
-.answer.thinking .think-dots{display:block;width:100%;height:44px}
-.answer.thinking .think-step{margin:8px 0 0;color:var(--tile-muted);font-size:14px}
 .askbar input::placeholder{color:#8A8FA8}
 .askbar button{border:0;background:#FFFFFF;color:#0A0A0A;border-radius:999px;padding:11px 20px;font-weight:700;cursor:pointer;white-space:nowrap}
 .askbar button:disabled{opacity:.5}
@@ -562,8 +562,10 @@ body.board-mode .site-foot,.legal .site-foot{display:block}
 @media (prefers-reduced-motion:reduce){.sf-support-btn.shake{animation:none}}
 .sf-support-btn:focus-visible{outline:2.5px solid var(--brand);outline-offset:3px}
 .sf-support-sub{margin:0;max-width:30ch;color:#6B6B70;font-size:12.5px;line-height:1.45}
-/* Hide Ko-fi's floating trigger (footer CTA is the entry point). visibility keeps layout so the popup still sizes correctly. */
-.floatingchat-container-wrap,.floatingchat-container-wrap-mobi{visibility:hidden!important;pointer-events:none!important}
+/* Remove Ko-fi's floating trigger from layout entirely (footer CTA is the entry point). On phones its wrapper is a
+   near full-width fixed bar near the bottom; even invisible, iOS Safari 26 reads it as an edge bar and paints the
+   status bar and toolbar solid. display:none keeps both clear. */
+.floatingchat-container-wrap,.floatingchat-container-wrap-mobi{display:none!important}
 /* Keep the official popup inside the viewport on phones, scrolling within itself. */
 .floating-chat-kofi-popup-iframe-mobi{max-height:calc(100dvh - env(safe-area-inset-top,0px) - 24px)!important}
 @media (max-width:720px){.sf-top{grid-template-columns:1fr 1fr}.sf-brandcol{grid-column:1/-1}}

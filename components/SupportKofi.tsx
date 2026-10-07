@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Official Ko-fi overlay widget. Its floating trigger is hidden (see .floatingchat-container-wrap in globals.css);
 // this footer CTA is the only entry point and clicks Ko-fi's own (same-origin, srcdoc) button so the official popup opens.
@@ -46,7 +46,8 @@ function openKofi(): boolean {
   for (const id of ids) {
     const frame = document.getElementById(id + CSS_ID) as HTMLIFrameElement | null;
     const btn = frame?.contentDocument?.getElementById(`${CSS_ID}-donate-button`);
-    if (btn && frame && getComputedStyle(frame.parentElement as Element).display !== "none") {
+    // The wrappers are display:none (see globals.css), so pick by screen size rather than visibility.
+    if (btn) {
       btn.click();
       return true;
     }
@@ -56,6 +57,16 @@ function openKofi(): boolean {
 
 export default function SupportKofi() {
   const btnRef = useRef<HTMLAnchorElement>(null);
+  // Load Ko-fi only once the footer is near the screen, so pages like Explore never get its fixed elements.
+  const [load, setLoad] = useState(false);
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el || load) return;
+    if (!("IntersectionObserver" in window)) { setLoad(true); return; }
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) { setLoad(true); io.disconnect(); } }, { rootMargin: "300px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [load]);
   // Shake once each time the button scrolls into view (skipped for reduced motion).
   useEffect(() => {
     const el = btnRef.current;
@@ -105,12 +116,14 @@ export default function SupportKofi() {
       </a>
       <p className="sf-support-sub">Help cover research, data checks, and keeping the site updated.</p>
       {/* Loaded once (next/script dedupes by id), after the page is idle, so it never blocks rendering. */}
-      <Script
-        id="kofi-overlay"
-        src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"
-        strategy="lazyOnload"
-        onReady={drawWidget}
-      />
+      {load && (
+        <Script
+          id="kofi-overlay"
+          src="https://storage.ko-fi.com/cdn/scripts/overlay-widget.js"
+          strategy="afterInteractive"
+          onReady={drawWidget}
+        />
+      )}
     </div>
   );
 }
