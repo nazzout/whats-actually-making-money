@@ -301,7 +301,16 @@ function buildField(){
 }
 const mod=(n,m)=>((n%m)+m)%m;
 // The layer scales around the screen centre, so shift the wrap window to cover the wider visible area when zoomed out.
-function paint(){const X=ox+aim.ax,Y=oy+aim.ay,px=VW/2*(1/zoom-1),py=VH/2*(1/zoom-1);for(const n of nodes){const x=mod(n.bx+X+n.mx+px,W)-n.mx-px,y=mod(n.by+Y+n.my+py,GH)-n.my-py;n.el.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`}}
+// lensK > 0 during the intro: a fisheye that pushes tiles out from the screen centre and enlarges the ones near it.
+let lensK=0;
+function paint(){const X=ox+aim.ax,Y=oy+aim.ay,px=VW/2*(1/zoom-1),py=VH/2*(1/zoom-1);
+  const cx=VW/2,cy=VH/2,R2=(VW*VW+VH*VH)/4||1,lens=Math.abs(lensK)>.001;
+  for(const n of nodes){let x=mod(n.bx+X+n.mx+px,W)-n.mx-px,y=mod(n.by+Y+n.my+py,GH)-n.my-py;
+    if(!lens){n.el.style.transform=`translate3d(${Math.round(x)}px,${Math.round(y)}px,0)`;continue}
+    // Bulge: displacement and size fall off with distance from the centre (gaussian), so the middle swells most.
+    const w=n.mx-GAP,h=n.my-GAP,dx=x+w/2-cx,dy=y+h/2-cy,s=1+lensK*1.1*Math.exp(-(dx*dx+dy*dy)/R2*2.2);
+    x=cx+dx*s-w/2;y=cy+dy*s-h/2;
+    n.el.style.transform=`translate3d(${x.toFixed(1)}px,${y.toFixed(1)}px,0) scale(${s.toFixed(3)})`}}
 function motionBlur(){
   // Skipped on touch devices: iOS renders SVG filters in software, and toggling one over live canvases makes their text flash.
   if(reduce||ZOOM_ON)return;
@@ -740,48 +749,28 @@ function collect(f){const fd=new FormData(f),g=k=>(fd.get(k)||"").toString().tri
   return {...cls,name:g("name"),form:g("form"),customer:g("customer"),model:g("model"),digital:g("digital"),aiRole:g("aiRole"),launched:g("launched"),website:/^https?:\/\//i.test(g("website"))?g("website"):(g("website")?"https://"+g("website"):""),trigger:g("trigger"),confidence:Number(g("confidence")),scores:Object.fromEntries(DIMS.map(([k])=>[k,Number(g("s_"+k))])),profitability:g("profitability")||"Not publicly verified.",summary:g("summary"),caveats:g("caveats"),recheck:g("recheck"),flags:fd.getAll("flag").map(String),evidence:ev}}
 $("#addBtn").addEventListener("click",()=>openForm(null));
 
-/* ---------- first-load intro: iris reveal + lens bulge ----------
-   The Explore canvas opens from a circle in the middle of the screen while a lens bulge flattens out, like looking
-   through glass that settles. Once per browser session, only on Explore, skipped for reduced motion.
-   Lens: an SVG displacement filter driven by a radial map. Only on desktop Chromium, where it renders reliably on
-   live content; Safari, Firefox and touch devices get the iris plus a zoom settle instead (iOS already struggles
-   with SVG filters over the live canvases, see motionBlur). The page is usable throughout: the nav and search bar
-   are outside the canvas and appear immediately. */
-function lensFilter(){
-  // Displacement map: red/green encode where each pixel samples from. Inside the lens, pixels sample closer to the
-  // centre (magnified); the effect fades to zero at the lens edge.
-  const N=128,c=document.createElement("canvas");c.width=c.height=N;const g=c.getContext("2d"),img=g.createImageData(N,N);
-  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
-    const nx=x/(N-1)*2-1,ny=y/(N-1)*2-1,r2=nx*nx+ny*ny,k=r2<1?(1-r2):0,i=(y*N+x)*4;
-    img.data[i]=Math.round(127.5-127.5*nx*k);img.data[i+1]=Math.round(127.5-127.5*ny*k);img.data[i+2]=128;img.data[i+3]=255;
-  }
-  g.putImageData(img,0,0);
-  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
-  svg.setAttribute("width","0");svg.setAttribute("height","0");svg.setAttribute("aria-hidden","true");svg.style.position="absolute";
-  // objectBoundingBox units: the map stretches over the canvas and the displacement scale is a fraction of its size.
-  svg.innerHTML=`<filter id="mmLens" x="0" y="0" width="1" height="1" primitiveUnits="objectBoundingBox" color-interpolation-filters="sRGB"><feImage href="${c.toDataURL()}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>`;
-  document.body.appendChild(svg);
-  return svg;
-}
+/* ---------- first-load intro: fisheye bulge of the grid ----------
+   The tiles themselves start bulged out from the screen centre, as if seen through a fisheye lens, and relax
+   back into the flat grid with a small springy overshoot. It is real geometry in paint() (each tile's position
+   and size), not an image filter, so it works the same in every browser and on phones.
+   Once per browser session, only on Explore, skipped for reduced motion. The nav and search bar are usable
+   throughout. */
 function playIntro(){
   if(reduce||location.hash==="#board")return;
   try{if(sessionStorage.getItem("mm_intro"))return;sessionStorage.setItem("mm_intro","1")}catch{}
-  const chromium=!!(navigator.userAgentData&&navigator.userAgentData.brands||[]).some?.(b=>/Chromium/i.test(b.brand));
-  const svg=chromium&&!ZOOM_ON?lensFilter():null,disp=svg?.querySelector("feDisplacementMap");
-  const f=field,D=1000,R=Math.hypot(innerWidth,innerHeight)/2+24,t0=performance.now();
-  const ease=t=>1-Math.pow(1-t,4); // fast open, soft settle
-  const done=()=>{f.style.clipPath="";f.style.transform="";f.style.filter="";f.style.willChange="";svg?.remove()};
-  f.style.willChange="clip-path,transform";f.style.clipPath="circle(0px at 50% 50%)";
-  if(svg)f.style.filter="url(#mmLens)";
+  const D=1500,t0=performance.now();
+  // Damped spring: starts fully bulged (1), dips slightly past flat (a brief pinch) and settles at 0.
+  const spring=t=>Math.exp(-4.2*t)*Math.cos(5.2*t);
+  lensK=1;field.style.opacity="0";
   const step=now=>{
-    const t=Math.min(1,(now-t0)/D),e=ease(t);
-    f.style.clipPath=`circle(${(R*e).toFixed(1)}px at 50% 50%)`;
-    f.style.transform=`scale(${(1.12-0.12*e).toFixed(4)})`;
-    if(disp)disp.setAttribute("scale",(0.14*(1-e)).toFixed(4));
-    if(t<1)requestAnimationFrame(step);else done();
+    const t=Math.min(1,(now-t0)/D),s=(now-t0)/1000;
+    lensK=t<1?spring(s):0;
+    field.style.opacity=String(Math.min(1,(now-t0)/260)); // fade in fast so the bulge is the first thing seen
+    paint();
+    if(t<1)requestAnimationFrame(step);else{lensK=0;field.style.opacity="";paint()}
   };
   requestAnimationFrame(step);
-  setTimeout(done,D+600); // never leave the canvas clipped if a frame is missed
+  setTimeout(()=>{if(lensK!==0||field.style.opacity){lensK=0;field.style.opacity="";paint()}},D+800); // never leave it distorted
 }
 
 /* ---------- boot (Vercel version) ---------- */
