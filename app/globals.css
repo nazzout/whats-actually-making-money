@@ -71,6 +71,13 @@ body.board-mode .tabs a[aria-current="page"]{background:#FFFFFF;color:#0A0A0A}
 .tile-ico:hover .cap,.tile-ico:focus-visible .cap{opacity:1}
 .tile-ico:focus-visible{outline:none}.tile-ico:focus-visible .ico-xl{outline:2.5px solid var(--brand);outline-offset:4px}
 .ico-s{width:26px;height:26px;border-radius:7px;font-size:13px}
+/* Occasional brand tile: our glass app icon, same footprint as a company icon tile. */
+.tile-brand{cursor:default}
+.item > .tile-brand:hover{scale:1}
+.field.dragging .tile-brand{cursor:grabbing}
+.tile-brand img{transition:opacity .15s}
+.tile-brand .brand-fx{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none}
+.tile-brand img{width:156px;height:156px;object-fit:contain;filter:drop-shadow(0 26px 40px rgba(0,0,0,.6));user-select:none;-webkit-user-drag:none}
 /* Steam logo is white, so its tile is always Steam navy (overrides the light board and sheet tiles). Padded so the mark is not cropped. */
 .ico.ico-steam,#board .row .ico-s.ico-steam,.dh-id .ico.ico-steam{background:#171A21;color:#FFFFFF}
 .ico.ico-steam img{object-fit:contain;padding:18%}

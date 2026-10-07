@@ -264,6 +264,33 @@ const TILT=[-6,4,-3,7,-8,3,6,-4,2,-7,5,-2];
 const PILLC=["cobalt","lime","chalk","peri","lime","cobalt","peri","chalk"];
 function pileHTML(g,n=0){return `<div class="pile" role="group" aria-label="${esc(g.label)}"><div class="gp">${g.keys.map((k,i)=>`<button class="bpill c-${PILLC[(i+n*3)%PILLC.length]}" data-pill="${esc(k)}" aria-pressed="${!!(highlight&&highlight.pill===k)}" style="--r:${TILT[(i+n)%TILT.length]}deg">${esc(pillLabel(k))}</button>`).join("")}</div></div>`}
 function groupHTML(g,cls=""){return `<div class="tile t-group ${cls}"><div class="gt">${esc(g.label)}</div><div class="gp">${g.keys.map(k=>`<button class="pill" data-pill="${esc(k)}" aria-pressed="${!!(highlight&&highlight.pill===k)}">${esc(pillLabel(k))}</button>`).join("")}</div></div>`}
+const BRAND_TILE=`<div class="tile-ico tile-brand" aria-hidden="true"><img src="/app-icon-glass.png" alt="" draggable="false" loading="lazy"></div>`;
+// Hover (or tap) on the brand tile: the icon bursts into particles and reassembles, signalling it is decorative.
+function dissolve(tile,e){
+  if(reduce||tile._busy)return;const img=tile.querySelector("img");if(!img||!img.complete||!img.naturalWidth)return;
+  tile._busy=true;
+  const S=img.offsetWidth||156,PAD=90,dpr=Math.min(2,devicePixelRatio||1),CW=S+PAD*2;
+  const src=document.createElement("canvas");src.width=S;src.height=S;const sx=src.getContext("2d");
+  let data;try{sx.drawImage(img,0,0,S,S);data=sx.getImageData(0,0,S,S).data}catch{tile._busy=false;return}
+  const cv=document.createElement("canvas");cv.className="brand-fx";cv.width=CW*dpr;cv.height=CW*dpr;cv.style.width=cv.style.height=CW+"px";
+  const ctx=cv.getContext("2d");ctx.scale(dpr,dpr);
+  const r=img.getBoundingClientRect(),hx=e?((e.clientX-r.left)/r.width)*S:S/2,hy=e?((e.clientY-r.top)/r.height)*S:S/2;
+  const P=[],STEP=3;
+  for(let y=0;y<S;y+=STEP)for(let x=0;x<S;x+=STEP){const i=(y*S+x)*4,a=data[i+3];if(a<40)continue;
+    const dx=x-hx,dy=y-hy,d=Math.hypot(dx,dy)||1,ang=Math.atan2(dy,dx)+(Math.random()-.5)*1.1,dist=30+Math.random()*70+(1-Math.min(1,d/S))*30;
+    P.push({x,y,tx:Math.cos(ang)*dist,ty:Math.sin(ang)*dist-Math.random()*20,c:`rgba(${data[i]},${data[i+1]},${data[i+2]},${(a/255).toFixed(2)})`,dl:Math.random()*.12})}
+  tile.appendChild(cv);img.style.transition="none";
+  // Crossfade at both ends: image fades out as particles appear, and fades back in while they settle, so there is no swap.
+  const T=1700,IN=.1,OUT=.7,t0=performance.now(),eo=t=>1-Math.pow(1-t,3),eio=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,ss=t=>t*t*(3-2*t);
+  (function frame(now){
+    const t=Math.min(1,(now-t0)/T);ctx.clearRect(0,0,CW,CW);
+    const imgA=t<IN?1-ss(t/IN):t>OUT?ss((t-OUT)/(1-OUT)):0,partA=t<IN?ss(t/IN):t>OUT?1-ss((t-OUT)/(1-OUT)):1;
+    img.style.opacity=imgA.toFixed(3);
+    for(const p of P){const u=Math.max(0,Math.min(1,(t-p.dl)/(1-p.dl)));const f=u<.4?eo(u/.4):1-eio((u-.4)/.6);
+      ctx.globalAlpha=partA*(1-f*.5);ctx.fillStyle=p.c;ctx.fillRect(PAD+p.x+p.tx*f,PAD+p.y+p.ty*f,STEP+.5,STEP+.5)}
+    if(t<1)requestAnimationFrame(frame);else{img.style.opacity="";img.style.transition="";cv.remove();setTimeout(()=>{tile._busy=false},300)}
+  })(t0);
+}
 function buildField(){
   if($("#explore").hidden)return;
   const vw=field.clientWidth||innerWidth, vh=field.clientHeight||innerHeight;
@@ -288,7 +315,9 @@ function buildField(){
       continue;
     }
     const d=sorted[(r*3+c)%N],ev=r%2===0;
-    put(ev?x0:x0+1,yT,tileHTML("icon",d),d.id);
+    // Now and then the icon slot shows our own glass app icon instead (decorative, not clickable).
+    const brand=(c*7+r*13)%11===5;
+    put(ev?x0:x0+1,yT,brand?BRAND_TILE:tileHTML("icon",d),brand?null:d.id);
     put(ev?x0+1:x0,yT,tileHTML("name",d),d.id);
     put(ev?x0:x0+1,yS,tileHTML("metric",d),d.id);
     put(ev?x0+1:x0,yS,tileHTML("score",d),d.id);
@@ -379,6 +408,7 @@ field.addEventListener("pointermove",e=>{
   if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(!moved&&Math.abs(dx)+Math.abs(dy)>5){moved=true;field.classList.add("dragging");try{field.setPointerCapture(drag.id)}catch{}}if(moved){ox+=dx/zoom;oy+=dy/zoom;vx=dx/zoom;vy=dy/zoom;drag.x=e.clientX;drag.y=e.clientY;paint()}});
 field.addEventListener("pointermove",e=>{if(e.pointerType==="mouse"&&!reduce){const r=field.getBoundingClientRect();aim.on=true;aim.x=e.clientX-r.left;aim.y=e.clientY-r.top;aim.overTarget=!!e.target.closest("[data-id],[data-pill]");if(!raf)raf=requestAnimationFrame(loop)}if(pinch||(drag&&moved))return;Wind.blow(e);const c=e.target.closest(".liquid");if(c)Liquid.stir(c,e)});
 field.addEventListener("pointerleave",()=>{aim.on=false});
+field.addEventListener("pointerover",e=>{if(e.pointerType!=="mouse"||drag&&moved)return;const b=e.target.closest(".tile-brand");if(b&&!b.contains(e.relatedTarget))dissolve(b,e)});
 field.addEventListener("pointerover",e=>{const c=e.target.closest(".t-metric.volt");if(c&&!c.contains(e.relatedTarget))playDoodle(c)});addEventListener("blur",()=>{aim.on=false});
 const endDrag=e=>{
   touches.delete(e.pointerId);
@@ -395,6 +425,7 @@ field.addEventListener("wheel",e=>{e.preventDefault();idle=false;ox-=e.deltaX/zo
 field.addEventListener("keydown",e=>{const m={ArrowLeft:[80,0],ArrowRight:[-80,0],ArrowUp:[0,80],ArrowDown:[0,-80]}[e.key];if(m&&e.target===field){e.preventDefault();idle=false;ox+=m[0];oy+=m[1];paint()}});
 field.addEventListener("click",e=>{
   if(moved){e.preventDefault();e.stopPropagation();moved=false;return}
+  const bt=e.target.closest(".tile-brand"); if(bt){dissolve(bt,e);return}
   const t=e.target.closest("[data-id]"); if(t){openDetail(t.dataset.id);return}
   const p=e.target.closest("[data-pill]"); if(p)applyPill(p.dataset.pill);
 },true);
