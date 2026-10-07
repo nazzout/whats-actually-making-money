@@ -26,7 +26,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 
 body.board-mode .brand{color:#FFFFFF}
 .brand .bname{color:#FFFFFF}
-.tabs{display:flex;background:rgba(255,255,255,.07);border:1px solid var(--line);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-radius:999px;padding:4px;gap:2px}
+.tabs{display:flex;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.22);box-shadow:inset 0 1px 0 rgba(255,255,255,.12);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);border-radius:999px;padding:4px;gap:2px}
 body.board-mode .tabs{background:var(--panel);border:1px solid var(--line)}
 .tabs a{padding:7px 16px;border-radius:999px;text-decoration:none;font-weight:600;font-size:14px;color:var(--on-canvas)}
 body.board-mode .tabs a{color:var(--muted)}
@@ -440,8 +440,7 @@ body.board-mode .tabs a[aria-current="page"]{background:#0A0A0A;color:#FFFFFF}
 /* Board: solid nav so the list scrolls cleanly under it and the pinned search bar. */
 body.board-mode .nav{background:#FFFFFF}
 /* On the board the page title carries the site name, so the nav shows only the tabs, kept on the right. */
-body.board-mode .brand{display:none}
-body.board-mode .nav{justify-content:flex-end}
+body.board-mode .brand{visibility:hidden;pointer-events:none} /* keep its box so nav height matches Explore: no jump */
 @media (min-width:761px){
   .pod{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;column-gap:12px;row-gap:4px;padding:16px 18px}
   .pod .pr{grid-column:1/-1}
