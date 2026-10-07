@@ -6,7 +6,7 @@ const DESCRIPTION =
   "Emerging products with real revenue, scored on how much the evidence can be trusted. Search a company, ask a question, or pick a starting point.";
 // Shown by iMessage, Slack, X, LinkedIn and others when the link is shared. 1200x630, the standard share size.
 // Bump ?v= whenever the image file changes: platforms cache previews by URL and would keep showing the old one.
-const SHARE_IMAGE = { url: "/wmm-meta-share-image.png?v=2", width: 1200,
+const SHARE_IMAGE = { url: "/wmm-meta-share-image.png?v=2", width: 1200, height: 630, alt: "What makes money? A research tool that scores emerging businesses on real revenue and how much the evidence can be trusted." };
 
 export const metadata: Metadata = {
   // Makes the relative image path absolute in share tags, which most platforms require.
