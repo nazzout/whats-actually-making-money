@@ -487,6 +487,9 @@ body.board-mode .nav{justify-content:flex-end}
   /* Board nav: no full-width white bar; only the toggle shows, in the same glass. */
   body.board-mode .nav{background:transparent}
   body.kb-open #board .toolbar.docked{bottom:calc(var(--kb,0px) + 8px)}
+  /* Footer in view: slide the docked bar away so it does not cover the footer links. */
+  #board .toolbar.docked{transition:opacity .25s ease,transform .3s var(--spring)}
+  body.foot-near:not(.filt-open):not(.kb-open) #board .toolbar.docked{opacity:0;transform:translateY(24px);pointer-events:none}
   /* Wide touch screens: keep the Filters sheet a comfortable width, centred. */
   body.filt-open .fsheet{margin:0 auto;max-width:560px}
 }

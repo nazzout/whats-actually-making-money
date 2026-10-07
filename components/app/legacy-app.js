@@ -644,6 +644,10 @@ function pinExplore(){
 addEventListener("scroll",()=>{if(!$("#explore").hidden)pinExplore()},{passive:true});
 addEventListener("resize",()=>requestAnimationFrame(pinExplore));
 DOCK_MQ.addEventListener?.("change",()=>{placeFsheet();updateDock();pinExplore()});
+// Near the bottom of the Board the docked search/filter bar would sit on top of the footer. Hide it while the footer
+// is in view and bring it back when scrolling up. Never while the Filters sheet is open.
+{const foot=document.querySelector(".site-foot");
+  if(foot&&"IntersectionObserver" in window)new IntersectionObserver(es=>{for(const e of es)document.body.classList.toggle("foot-near",e.isIntersecting)},{rootMargin:"0px 0px -24px 0px"}).observe(foot)}
 
 /* ---------- sheet: detail + form ---------- */
 let lastFocus=null;
