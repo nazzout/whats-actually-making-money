@@ -740,6 +740,50 @@ function collect(f){const fd=new FormData(f),g=k=>(fd.get(k)||"").toString().tri
   return {...cls,name:g("name"),form:g("form"),customer:g("customer"),model:g("model"),digital:g("digital"),aiRole:g("aiRole"),launched:g("launched"),website:/^https?:\/\//i.test(g("website"))?g("website"):(g("website")?"https://"+g("website"):""),trigger:g("trigger"),confidence:Number(g("confidence")),scores:Object.fromEntries(DIMS.map(([k])=>[k,Number(g("s_"+k))])),profitability:g("profitability")||"Not publicly verified.",summary:g("summary"),caveats:g("caveats"),recheck:g("recheck"),flags:fd.getAll("flag").map(String),evidence:ev}}
 $("#addBtn").addEventListener("click",()=>openForm(null));
 
+/* ---------- first-load intro: iris reveal + lens bulge ----------
+   The Explore canvas opens from a circle in the middle of the screen while a lens bulge flattens out, like looking
+   through glass that settles. Once per browser session, only on Explore, skipped for reduced motion.
+   Lens: an SVG displacement filter driven by a radial map. Only on desktop Chromium, where it renders reliably on
+   live content; Safari, Firefox and touch devices get the iris plus a zoom settle instead (iOS already struggles
+   with SVG filters over the live canvases, see motionBlur). The page is usable throughout: the nav and search bar
+   are outside the canvas and appear immediately. */
+function lensFilter(){
+  // Displacement map: red/green encode where each pixel samples from. Inside the lens, pixels sample closer to the
+  // centre (magnified); the effect fades to zero at the lens edge.
+  const N=128,c=document.createElement("canvas");c.width=c.height=N;const g=c.getContext("2d"),img=g.createImageData(N,N);
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    const nx=x/(N-1)*2-1,ny=y/(N-1)*2-1,r2=nx*nx+ny*ny,k=r2<1?(1-r2):0,i=(y*N+x)*4;
+    img.data[i]=Math.round(127.5-127.5*nx*k);img.data[i+1]=Math.round(127.5-127.5*ny*k);img.data[i+2]=128;img.data[i+3]=255;
+  }
+  g.putImageData(img,0,0);
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("width","0");svg.setAttribute("height","0");svg.setAttribute("aria-hidden","true");svg.style.position="absolute";
+  // objectBoundingBox units: the map stretches over the canvas and the displacement scale is a fraction of its size.
+  svg.innerHTML=`<filter id="mmLens" x="0" y="0" width="1" height="1" primitiveUnits="objectBoundingBox" color-interpolation-filters="sRGB"><feImage href="${c.toDataURL()}" x="0" y="0" width="1" height="1" preserveAspectRatio="none" result="m"/><feDisplacementMap in="SourceGraphic" in2="m" scale="0" xChannelSelector="R" yChannelSelector="G"/></filter>`;
+  document.body.appendChild(svg);
+  return svg;
+}
+function playIntro(){
+  if(reduce||location.hash==="#board")return;
+  try{if(sessionStorage.getItem("mm_intro"))return;sessionStorage.setItem("mm_intro","1")}catch{}
+  const chromium=!!(navigator.userAgentData&&navigator.userAgentData.brands||[]).some?.(b=>/Chromium/i.test(b.brand));
+  const svg=chromium&&!ZOOM_ON?lensFilter():null,disp=svg?.querySelector("feDisplacementMap");
+  const f=field,D=1000,R=Math.hypot(innerWidth,innerHeight)/2+24,t0=performance.now();
+  const ease=t=>1-Math.pow(1-t,4); // fast open, soft settle
+  const done=()=>{f.style.clipPath="";f.style.transform="";f.style.filter="";f.style.willChange="";svg?.remove()};
+  f.style.willChange="clip-path,transform";f.style.clipPath="circle(0px at 50% 50%)";
+  if(svg)f.style.filter="url(#mmLens)";
+  const step=now=>{
+    const t=Math.min(1,(now-t0)/D),e=ease(t);
+    f.style.clipPath=`circle(${(R*e).toFixed(1)}px at 50% 50%)`;
+    f.style.transform=`scale(${(1.12-0.12*e).toFixed(4)})`;
+    if(disp)disp.setAttribute("scale",(0.14*(1-e)).toFixed(4));
+    if(t<1)requestAnimationFrame(step);else done();
+  };
+  requestAnimationFrame(step);
+  setTimeout(done,D+600); // never leave the canvas clipped if a frame is missed
+}
+
 /* ---------- boot (Vercel version) ---------- */
 // Reads come from the server. Owner writes go to /api/admin/companies/:id. Same Firestore-style surface the original code expects.
 let lastData=JSON.stringify(opts.initial||[]),lastVersion=null;
@@ -772,6 +816,7 @@ items=(opts.initial||[]).map(derive);
 $("#addBtn").hidden=!canWrite;
 $("#status").textContent=canWrite?"Signed in as owner":"Live data";
 if(canWrite){$("#addBtn").insertAdjacentHTML("beforebegin",`<a class="btn" href="/admin/review" style="text-decoration:none">Review queue</a>`)}
+playIntro(); // before the canvas fills, so tiles never flash at full size first
 renderBoard(); buildField();
 checkVersion();
 addEventListener("focus",checkVersion);
