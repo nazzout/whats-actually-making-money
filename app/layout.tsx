@@ -1,10 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const TITLE = "What makes money?";
+const DESCRIPTION =
+  "Emerging products with real revenue, scored on how much the evidence can be trusted. Search a company, ask a question, or pick a starting point.";
+// Shown by iMessage, Slack, X, LinkedIn and others when the link is shared. 1200x630, the standard share size.
+const SHARE_IMAGE = { url: "/wmm-meta-share-image.png", width: 1200, height: 630, alt: "What makes money? A research tool that scores emerging businesses on real revenue and how much the evidence can be trusted." };
+
 export const metadata: Metadata = {
-  title: "What makes money?",
-  description:
-    "Recently launched and recently scaled businesses with credible evidence that people are paying, scored on how much the numbers can be trusted and how strong the business looks.",
+  // Makes the relative image path absolute in share tags, which most platforms require.
+  metadataBase: new URL("https://whatmakesmoney.io"),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { type: "website", url: "/", siteName: TITLE, title: TITLE, description: DESCRIPTION, images: [SHARE_IMAGE] },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION, images: [SHARE_IMAGE] },
 };
 
 export const viewport: Viewport = {
