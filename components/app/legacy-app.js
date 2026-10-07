@@ -514,6 +514,33 @@ function searchResult(q,local,note){
   const found=local.length?`Found ${local.length} matching ${local.length===1?"company":"companies"}.`:"Nothing in the dataset matches that yet. Try a company name, a category like games or physical products, or open the board.";
   showAnswer(note?`${note} ${found}`:found,local,"Search");
 }
+/* ---------- thinking animation (answer panel only) ----------
+   A short strip of green dots with a soft wave rippling out from the centre, plus honest status lines. No percentage:
+   real progress is unknown. Build/opportunity questions also do a web check on the server, so they get one more
+   step. This pattern mirrors lib/ask.ts GUIDANCE only to choose the lines; the server still decides the mode.
+   The answer replaces it in place (showAnswer rewrites the panel), which also stops the loop. */
+const GUIDE_Q=/\b(should|could|can|would)\b.*\b(build|make|launch|start|create|sell)\b|\b(worth|realistic(ally)?)\b.*\b(build|make|launch|start)\b|\bopportunit|\bgaps? in the market\b|\bunderserved\b|\bwhat to build\b|\bniches?\b/i;
+function startThinking(q){
+  const steps=GUIDE_Q.test(q)?["Checking the dataset…","Comparing companies…","Checking the market…"]:["Checking the dataset…","Comparing companies…"];
+  $("#answer").innerHTML=`<div class="answer thinking"><canvas class="think-dots" aria-hidden="true"></canvas><p class="think-step" role="status" aria-live="polite">${steps[0]}</p></div>`;
+  const cv=$("#answer .think-dots"),st=$("#answer .think-step"),ctx=cv.getContext("2d");
+  const dpr=Math.min(2,devicePixelRatio||1),W=cv.clientWidth||300,H=44;cv.width=W*dpr;cv.height=H*dpr;ctx.scale(dpr,dpr);
+  const col=getComputedStyle(document.documentElement).getPropertyValue("--brand").trim()||"#3DCB52";
+  const G=9,cols=Math.max(1,Math.floor(W/G)),rows=Math.max(1,Math.floor(H/G)),ox=(W-(cols-1)*G)/2,oy=(H-(rows-1)*G)/2,cx=W/2,cy=H/2,t0=performance.now();
+  let i=0;const timer=setInterval(()=>{if(!st.isConnected){clearInterval(timer);return}if(i<steps.length-1)st.textContent=steps[++i]},1700);
+  const draw=now=>{
+    if(!cv.isConnected){clearInterval(timer);return}
+    const t=(now-t0)/1000;ctx.clearRect(0,0,W,H);ctx.fillStyle=col;
+    for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){
+      const x=ox+c*G,y=oy+r*G,d=Math.hypot((x-cx)/W*3,(y-cy)/H*.8);
+      // Reduced motion: one static frame of evenly sized dots.
+      const wave=reduce?.5:.5+.5*Math.sin(d*7-t*4),fall=Math.max(0,1-d*.55);
+      ctx.globalAlpha=.25+.75*wave*fall;ctx.beginPath();ctx.arc(x,y,.6+2.6*wave*fall,0,7);ctx.fill();
+    }
+    ctx.globalAlpha=1;if(!reduce)requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+}
 async function ask(q){
   if([...q].length>ASK_MAX){showAnswer(`Please shorten your question to ${ASK_MAX} characters or less.`,[],"Search");return}
   const exact=items.find(d=>d.name.toLowerCase()===q.toLowerCase());
@@ -522,7 +549,7 @@ async function ask(q){
   // Dataset first: a simple filter with matches never spends an AI question.
   if(!sample||(local.length&&!SYNTH.test(q))){searchResult(q,local);return}
   const btn=$("#askBtn"); btn.disabled=true; btn.textContent="Thinking…";
-  $("#answer").innerHTML=`<div class="answer" role="status"><p>Checking the dataset…</p></div>`;
+  startThinking(q);
   askCtl?.abort(); askCtl=new AbortController();
   try{
     const r=await sample.json(q,{signal:askCtl.signal});
