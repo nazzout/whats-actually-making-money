@@ -779,7 +779,9 @@ function playIntro(){
 
 /* ---------- boot (Vercel version) ---------- */
 // Reads come from the server. Owner writes go to /api/admin/companies/:id. Same Firestore-style surface the original code expects.
-let lastData=JSON.stringify(opts.initial||[]),lastVersion=null;
+let lastData=JSON.stringify(opts.initial||[]),lastVersion=null,lastSync=0,flashT=null;
+function renderAge(msg){const el=$("#liveAge");if(!el)return;if(msg){el.textContent=" · "+msg;return}const s=Math.round((Date.now()-lastSync)/1000);el.textContent=" · "+(s<60?"updated just now":s<3600?`updated ${Math.floor(s/60)}m ago`:`updated ${Math.floor(s/3600)}h ago`)}
+function markSynced(changed){lastSync=Date.now();const d=document.querySelector(".live-dot");if(changed&&d){d.classList.remove("burst");void d.offsetWidth;d.classList.add("burst");renderAge("new data");clearTimeout(flashT);flashT=setTimeout(()=>{flashT=null;renderAge()},6000)}else if(!flashT)renderAge()}
 async function refresh(){
   try{const r=await fetch("/api/companies",{cache:"no-store"});if(!r.ok)return;const j=await r.json();const s=JSON.stringify(j.companies||[]);if(s===lastData)return;lastData=s;items=(j.companies||[]).map(derive);renderBoard();buildField()}catch{}
 }
@@ -787,8 +789,8 @@ async function refresh(){
 async function checkVersion(){
   if(document.hidden)return;
   try{const r=await fetch("/api/version",{cache:"no-store"});if(!r.ok)return;const {version}=await r.json();
-    if(lastVersion===null){lastVersion=version;return}
-    if(version!==lastVersion){lastVersion=version;await refresh()}}catch{}
+    if(lastVersion===null){lastVersion=version;markSynced(false);return}
+    if(version!==lastVersion){lastVersion=version;await refresh();markSynced(true)}else markSynced(false)}catch{}
 }
 async function send(method,id,body){
   const r=await fetch(`/api/admin/companies/${encodeURIComponent(id)}`,{method,headers:{"content-type":"application/json"},body:body?JSON.stringify(body):undefined});
@@ -807,7 +809,10 @@ canWrite=!!opts.canWrite;
 fillFilters(); route();
 items=(opts.initial||[]).map(derive);
 $("#addBtn").hidden=!canWrite;
-$("#status").textContent=canWrite?"Signed in as owner":"Live data";
+// Live status: rippling dot + "updated X ago" that resets on every successful sync; a stronger pulse when data changes.
+const liveLabel=canWrite?"Signed in as owner · Live":"Live data";
+$("#status").innerHTML=`<span class="live"><span class="live-dot" aria-hidden="true"><i></i></span><span>${liveLabel}</span><span class="live-age" id="liveAge"></span></span>`;
+lastSync=Date.now();renderAge();setInterval(()=>{if(!flashT)renderAge()},30000);
 if(canWrite){$("#addBtn").insertAdjacentHTML("beforebegin",`<a class="btn" href="/admin/review" style="text-decoration:none">Review queue</a>`)}
 playIntro(); // before the canvas fills, so tiles never flash at full size first
 renderBoard(); buildField();

@@ -1,12 +1,17 @@
+import SupportKofi from "@/components/SupportKofi";
+
 // Site footer. Shown on the legal pages, and under the Board (hidden on the full-screen Explore canvas).
 // Layout follows louder.wtf: brand left, link columns, then a bottom bar.
 export default function SiteFooter() {
   return (
     <footer className="site-foot">
       <div className="sf-top">
-        <a className="sf-brand" href="/">
-          What makes money?
-        </a>
+        <div className="sf-brandcol">
+          <a className="sf-brand" href="/">
+            What makes money?
+          </a>
+          <SupportKofi />
+        </div>
         <nav className="sf-col" aria-label="Product">
           <h4>Product</h4>
           <a href="/#explore">Explore</a>

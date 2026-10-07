@@ -4,9 +4,9 @@
   --canvas:#0B0B0B; --on-canvas:#FFFFFF; --brand:#00D54B; --brand-bright:#21FB6F; --on-brand:#0A0A0A;
   --tile:#171717; --volt:#D9FC51; --moss:#578A3A; --sea:#468358; --tide:#367285; --lime:#E6F26B; --peri:#9DAEFF; --chalk:#F4F4F0; --paper:#FFFFFF; --paper-ink:#111111; --paper-muted:#6E6E6E; --paper-track:#ECECEC; --cobalt:#1233C8; --cobalt-deep:#0B248E; --cobalt-line:#2B4BD8; --on-cobalt-muted:rgba(255,255,255,.72); --tile-ink:#F5F5F5; --tile-dark:#00D54B; --tile-muted:#9C9C9C; --tile-line:#262626;
   --bg:#0B0B0B; --panel:#151515; --ink:#F2F2F2; --muted:#9C9C9C; --line:#272727; --soft:#1F1F1F;
-  --trust:#F2F2F2; --strength:#00D54B; --flag:#FF8A5C; --danger:#FF6B6B;
+  --trust:#F2F2F2; --strength:#00D54B; --flag:#FF5CC6; --danger:#FF6B6B;
   --native:#B39BFF; --engine:#3FD6F5; --feature:#FFB443; --none:#8C8C8C;
-  --zone-good:rgba(0,213,75,.09); --zone-hype:rgba(255,138,92,.08);
+  --zone-good:rgba(0,213,75,.09); --zone-hype:rgba(255,45,180,.08);
   --spring:cubic-bezier(.2,1.25,.35,1);
   color-scheme:dark;
   box-sizing:border-box;
@@ -177,6 +177,17 @@ body.kb-open .askpanel{max-height:min(440px,calc(var(--vvh,100vh) - 104px))}
 .btn.primary{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
 .btn.danger{color:var(--danger)}
 .status{font-size:13px;color:var(--muted)}
+/* live indicator: green dot with thin sound-wave rings rippling out */
+.live{display:inline-flex;align-items:center;gap:8px}
+.live-age{color:var(--muted);opacity:.8;margin-left:-4px}
+.live-dot{position:relative;width:8px;height:8px;border-radius:50%;background:var(--brand);box-shadow:0 0 6px rgba(0,213,75,.6);flex:none}
+.live-dot::before,.live-dot::after,.live-dot i{content:"";position:absolute;inset:0;border-radius:50%;border:1px solid var(--brand);opacity:0;animation:liveRipple 3s cubic-bezier(.2,.6,.35,1) infinite}
+.live-dot::after{animation-delay:1s}
+.live-dot i{animation-delay:2s}
+@keyframes liveRipple{0%{transform:scale(1);opacity:.7}100%{transform:scale(3.4);opacity:0}}
+.live-dot.burst{animation:liveBurst 1.2s ease-out}
+@keyframes liveBurst{0%{box-shadow:0 0 0 0 rgba(0,213,75,.75)}100%{box-shadow:0 0 0 14px rgba(0,213,75,0)}}
+@media (prefers-reduced-motion:reduce){.live-dot::before,.live-dot::after,.live-dot i,.live-dot.burst{animation:none}}
 .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
 .toolbar input,.toolbar select,.fsheet select{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 15px}
 .toolbar input{flex:1 1 200px;min-width:0}
@@ -289,7 +300,7 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 [hidden]{display:none !important}
 
 /* ---------- light surfaces: detail sheet + board ---------- */
-.sheet,#board,body > .fsheet{--panel:#FFFFFF;--ink:#0A0A0A;--muted:#6B6B70;--line:#E7E7EA;--soft:#F3F3F5;--trust:#0A0A0A;--strength:#3DCB52;--native:#7B5CF0;--engine:#0E9FC2;--feature:#D98A0B;--none:#A3A3A8;--flag:#C4501C;--danger:#D93636;--zone-good:rgba(61,203,82,.10);--zone-hype:rgba(196,80,28,.07);color:var(--ink)}
+.sheet,#board,body > .fsheet{--panel:#FFFFFF;--ink:#0A0A0A;--muted:#6B6B70;--line:#E7E7EA;--soft:#F3F3F5;--trust:#0A0A0A;--strength:#3DCB52;--native:#7B5CF0;--engine:#0E9FC2;--feature:#D98A0B;--none:#A3A3A8;--flag:#C2187F;--danger:#D93636;--zone-good:rgba(61,203,82,.10);--zone-hype:rgba(194,24,127,.07);color:var(--ink)}
 .sheet{background:#FFFFFF;border-left:0;width:min(600px,100%)}
 .sheet.on{box-shadow:-30px 0 80px -20px rgba(0,0,0,.6)}
 .sheet :focus-visible{outline-color:#0A0A0A}
@@ -334,11 +345,11 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 .vw b{color:var(--ink);font-weight:600}
 .verdict .vrow{grid-template-columns:150px minmax(0,1fr)}
 .verdict .vw{grid-column:2;margin-top:-6px}
-.tag{display:inline-block;font-size:12px;font-weight:600;color:var(--flag);background:rgba(196,80,28,.09);border-radius:999px;padding:2px 9px;vertical-align:1px}
+.tag{display:inline-block;font-size:12px;font-weight:600;color:var(--flag);background:rgba(194,24,127,.09);border-radius:999px;padding:2px 9px;vertical-align:1px}
 .pf{display:flex;gap:12px;align-items:flex-start;padding:16px 4px;border-bottom:1px solid var(--line);margin-top:6px}
 .pf-dot{width:10px;height:10px;border-radius:50%;margin-top:6px;flex:none;background:#C9C9CE}
 .pf-verified .pf-dot{background:var(--strength)}
-.pf-claimed .pf-dot{background:#E0A21B}
+.pf-claimed .pf-dot{background:#FF2DB4}
 .pf-loss .pf-dot{background:var(--danger)}
 .pf b{display:block;font-weight:600}
 .pf span{color:var(--muted);font-size:14px}
@@ -363,7 +374,7 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 /* Freshness: how recently the figure was confirmed against its source. */
 .age{font-size:12px;color:var(--muted);white-space:nowrap}
 .age.warn{color:var(--flag);font-weight:600}
-.tag.soft{color:var(--flag);background:rgba(196,80,28,.09);font-weight:500;margin-top:6px}
+.tag.soft{color:var(--flag);background:rgba(194,24,127,.09);font-weight:500;margin-top:6px}
 .ev-v .tag.soft{display:inline-block}
 .facts{display:grid;grid-template-columns:1fr 1fr;gap:12px 24px;margin:0}
 .facts dt{font-size:12.5px;color:var(--muted)}
@@ -532,7 +543,21 @@ body.board-mode .site-foot,.legal .site-foot{display:block}
 .sf-note{max-width:1180px;margin:32px auto 0;color:#6B6B70;font-size:12.5px;line-height:1.5}
 .sf-bottom{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;max-width:1180px;margin:20px auto 0;padding-top:20px;border-top:1px solid #E7E7EA;font-size:12.5px;color:#6B6B70}
 .sf-bottom a{color:#6B6B70;text-decoration:none}
-@media (max-width:720px){.sf-top{grid-template-columns:1fr 1fr}.sf-brand{grid-column:1/-1}}
+/* Ko-fi support CTA: secondary, quiet outline pill under the brand */
+.sf-brandcol{display:flex;flex-direction:column;align-items:flex-start;gap:14px}
+.sf-support{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.sf-support-btn{display:inline-flex;align-items:center;gap:8px;border:1px solid #0A0A0A;background:#0A0A0A;color:#FFFFFF;border-radius:999px;padding:11px 20px;font-size:15px;font-weight:700;text-decoration:none;transition:background-color .2s,border-color .2s}
+.sf-support-btn:hover{background:#2A2A2E;border-color:#2A2A2E;color:#FFFFFF}
+.sf-support-btn.shake{animation:sfShake .7s cubic-bezier(.36,.07,.19,.97) .15s both}
+@keyframes sfShake{10%,90%{transform:translateX(-1px) rotate(-.5deg)}20%,80%{transform:translateX(3px) rotate(1deg)}30%,50%,70%{transform:translateX(-5px) rotate(-1.5deg)}40%,60%{transform:translateX(5px) rotate(1.5deg)}}
+@media (prefers-reduced-motion:reduce){.sf-support-btn.shake{animation:none}}
+.sf-support-btn:focus-visible{outline:2.5px solid var(--brand);outline-offset:3px}
+.sf-support-sub{margin:0;max-width:30ch;color:#6B6B70;font-size:12.5px;line-height:1.45}
+/* Hide Ko-fi's floating trigger (footer CTA is the entry point). visibility keeps layout so the popup still sizes correctly. */
+.floatingchat-container-wrap,.floatingchat-container-wrap-mobi{visibility:hidden!important;pointer-events:none!important}
+/* Keep the official popup inside the viewport on phones, scrolling within itself. */
+.floating-chat-kofi-popup-iframe-mobi{max-height:calc(100dvh - env(safe-area-inset-top,0px) - 24px)!important}
+@media (max-width:720px){.sf-top{grid-template-columns:1fr 1fr}.sf-brandcol{grid-column:1/-1}}
 
 /* ---------- legal pages ---------- */
 body:has(.legal){background:#FFFFFF}
