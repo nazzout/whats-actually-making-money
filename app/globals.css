@@ -262,6 +262,8 @@ svg.plot{width:100%;height:auto;display:block}
 .scrim:not(.on){display:none}
 .sheet{position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--panel);color:var(--ink);z-index:41;transform:translateX(105%);transition:transform .55s var(--spring);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);border-radius:24px 0 0 24px;border-left:1px solid var(--line)}
 .sheet.on{transform:none}
+/* Closed sheet is out of layout so iOS keeps the status bar/toolbar clear (see AGENTS.md). */
+.sheet.gone{display:none}
 .sheet-in{overflow:auto;padding:22px 24px 30px}
 .sh-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
 .sh-head h3{font-size:40px;line-height:.95;letter-spacing:-.04em;margin:0;font-weight:800}

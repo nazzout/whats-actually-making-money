@@ -7,5 +7,6 @@ iOS Safari 26 paints a solid strip behind the status bar/toolbar whenever a fixe
 - Never add a full-width (or near full-width) `position:fixed` element at the top or bottom on phones/iPads. Hidden is not enough; it must be `display:none` or not in the DOM.
 - Keep the current mechanics in `app/globals.css` untouched: `.nav{display:contents}` on touch devices with individually fixed pills, `#explore` not fixed on touch devices, `--peek` + `pinExplore` (in `components/app/legacy-app.js`), and `#explore{height:calc(100% + var(--peek))}`.
 - Do not add `html` background colors or change `#explore`/`html`/`body` heights (`dvh`/`lvh`/`min-height`) without testing on a real iPhone.
+- Sheets, modals, scrims and other overlays may tint the bars while open, but must be fully removed from layout (`display:none`, e.g. `.sheet.gone`, `.scrim:not(.on)`) once closed. Parking them off-screen with `transform` is not enough.
 - Third-party widgets/scripts (e.g. Ko-fi) must not inject fixed edge bars. Ko-fi's floating wrappers stay `display:none!important`, and the Ko-fi script only loads when the footer is near view (`components/SupportKofi.tsx`), never on Explore.
 - Any change touching fixed elements, the nav, Explore sizing, or third-party scripts must be checked on an iPhone (Board, Explore, and switching back and forth) before pushing.

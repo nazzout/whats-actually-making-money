@@ -709,8 +709,15 @@ DOCK_MQ.addEventListener?.("change",()=>{placeFsheet();updateDock();pinExplore()
 
 /* ---------- sheet: detail + form ---------- */
 let lastFocus=null;
-function openSheet(html){lastFocus=document.activeElement;$("#sheetIn").innerHTML=html;$("#sheet").classList.add("on");$("#scrim").classList.add("on");setTimeout(()=>$("#sheetIn").querySelector("button,input")?.focus(),60)}
-function closeSheet(){$("#sheet").classList.remove("on");$("#scrim").classList.remove("on");lastFocus?.focus?.()}
+// The sheet is a full-width fixed panel on phones. Parked off-screen it would still make iOS Safari 26 paint the status
+// bar/toolbar solid, so it is removed from layout (.gone = display:none) once it has slid out, and restored before opening.
+let sheetGoneT=null;
+$("#sheet").classList.add("gone");
+function openSheet(html){lastFocus=document.activeElement;$("#sheetIn").innerHTML=html;const sh=$("#sheet");clearTimeout(sheetGoneT);
+  if(sh.classList.contains("gone")){sh.classList.remove("gone");void sh.offsetWidth} // reflow so the slide-in still animates
+  sh.classList.add("on");$("#scrim").classList.add("on");setTimeout(()=>$("#sheetIn").querySelector("button,input")?.focus(),60)}
+function closeSheet(){const sh=$("#sheet");sh.classList.remove("on");$("#scrim").classList.remove("on");lastFocus?.focus?.();
+  clearTimeout(sheetGoneT);sheetGoneT=setTimeout(()=>{if(!sh.classList.contains("on"))sh.classList.add("gone")},reduce?0:600)}
 $("#scrim").addEventListener("click",closeSheet);
 addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#sheet").classList.contains("on"))closeSheet()});
 
