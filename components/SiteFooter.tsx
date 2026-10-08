@@ -26,7 +26,7 @@ export default function SiteFooter() {
         <nav className="sf-col" aria-label="Contact">
           <h4>Contact</h4>
           <a href="mailto:nazz@atemporal.xyz?subject=Correction%20request">Request a correction</a>
-          <a href="mailto:nazz@atemporal.xyz">Email us</a>
+          <a href="/contact">Email us</a>
         </nav>
       </div>
       <p className="sf-note">

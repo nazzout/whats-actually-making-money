@@ -588,3 +588,8 @@ body:has(.legal){background:#FFFFFF}
 .lg-doc ul{margin:0 0 12px;padding-left:20px;color:#2A2A2E}
 .lg-doc li{margin:4px 0}
 .lg-doc a{color:#0A7A2F;font-weight:600}
+/* Contact page: the email address is the focal point. */
+.lg-doc .ct-label{margin:28px 0 4px;color:#6B6B70;font-size:14px}
+.lg-doc .ct-email{margin:0 0 28px;font-size:clamp(24px,5vw,34px);font-weight:700;letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}
+.lg-doc .ct-email a{color:#0A0A0A;text-decoration:underline;text-decoration-color:#00D54B;text-decoration-thickness:3px;text-underline-offset:6px}
+.lg-doc .ct-email a:hover{color:#0A7A2F}
