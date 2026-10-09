@@ -72,11 +72,14 @@ export const AdoptionSchema = z.object({
 export type Adoption = z.infer<typeof AdoptionSchema>;
 
 // Capital is context only and never feeds any score. The status keeps "no outside funding" distinct from "not known".
+// Agents sometimes write "Not disclosed" instead of leaving a field out. Unknown must stay empty, not become text.
+const PLACEHOLDER = /^(not (disclosed|public|available|reported|known)|undisclosed|unknown|n\/?a|none|-+)\.?$/i;
+const known = (max: number) => z.preprocess((v) => (typeof v === "string" && PLACEHOLDER.test(v.trim()) ? undefined : v), z.string().trim().max(max).optional());
 export const CapitalSchema = z
   .object({
     status: z.enum(CAPITAL_STATUS),
-    totalRaised: z.string().trim().max(60).optional(),
-    latestValuation: z.string().trim().max(60).optional(),
+    totalRaised: known(60),
+    latestValuation: known(60),
     period: z.string().trim().max(60).optional(),
     source: z.string().trim().max(120).optional(),
     url: url.or(z.literal("")).optional(),

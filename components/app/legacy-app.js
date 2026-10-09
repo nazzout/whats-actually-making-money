@@ -664,7 +664,9 @@ function adoptionHTML(d){
   const {current,earlier}=adoptionSplit(d);if(!current.length)return "";
   return `<section class="sec"><h4>Demand and adoption</h4><ul class="evl">${current.map(adItem).join("")}</ul>${earlier.length?`<details class="ad-hist"><summary>Earlier figures (${earlier.length})</summary><ul class="evl">${earlier.map(adItem).join("")}</ul></details>`:""}</section>`;
 }
-const capWord=c=>!c?"":c.status==="bootstrapped"?"Bootstrapped, no outside funding":c.status==="unknown"?"Not disclosed":[c.totalRaised?`Raised ${c.totalRaised}`:"",c.latestValuation?`valued at ${c.latestValuation}`:""].filter(Boolean).join(", ")+(c.period?` (${c.period})`:"");
+const capWord=c=>{if(!c)return "";if(c.status==="bootstrapped")return "Bootstrapped, no outside funding";if(c.status==="unknown")return "Not disclosed";
+  const parts=[c.totalRaised?`Raised ${c.totalRaised}`:"",c.latestValuation?`valued at ${c.latestValuation}`:""].filter(Boolean);
+  return parts.length?parts.join(", ")+(c.period?` (${c.period})`:""):"Funded, amounts not disclosed"};
 $("#stats").addEventListener("click",e=>{const c=e.target.closest("[data-chip]");if(!c)return;const k=c.dataset.chip;chip=chip===k?"":k;renderBoard()});
 // Mobile filters: the four dropdowns live in a bottom sheet behind one button that shows how many are set.
 const FILT_IDS=["fInd","fRole","fDig","fForm"];

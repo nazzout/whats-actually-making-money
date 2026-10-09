@@ -35,7 +35,7 @@ Adoption kinds: Paying customers, Paying-customer growth, Active users, Retentio
 For agencies, studios, production companies and services use the business equivalents: Repeat clients, Client wins or contract growth, Proprietary tools or IP, plus revenue and margins where known.
 Demand: 5 needs monetized adoption, retention or repeat evidence, and sustained growth (Growth 4+). 4: strong paying-customer growth, or documented repeat usage or repeat clients. 3: meaningful adoption with some monetization. 2: strong adoption without clear monetization. 1: discovery signals only (rankings, review velocity, buzz). 0: documented decline or churn. Leave demand out entirely when you do not know.
 Never infer retention from popularity. Downloads, followers, traffic and sign-ups are not paying customers.
-Capital: {status: "bootstrapped" | "funded" | "unknown", totalRaised, latestValuation, period, source, url}. Bootstrapped means confirmed no outside funding. Unknown means not public. Never guess.
+Capital: {status: "bootstrapped" | "funded" | "unknown", totalRaised, latestValuation, period, source, url}. Bootstrapped means confirmed no outside funding. Funded means it raised outside money. Unknown means not public. Being acquired is not funding: record the deal as evidence (Acquisition price, if disclosed), and set capital from the company's own fundraising, or unknown. Leave out any field you do not know; never write "not disclosed" or similar into a field. Never guess.
 
 ## Never
 - Present funding, valuation, downloads, users, GMV, gross consumer spend, units, transaction volume or app-store gross as company revenue.
