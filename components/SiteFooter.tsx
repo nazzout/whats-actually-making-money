@@ -16,6 +16,7 @@ export default function SiteFooter() {
           <h4>Product</h4>
           <a href="/#explore">Explore</a>
           <a href="/#board">Board</a>
+          <a href="/how-we-score">How we score</a>
         </nav>
         <nav className="sf-col" aria-label="Legal">
           <h4>Legal</h4>

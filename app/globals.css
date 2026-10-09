@@ -342,7 +342,7 @@ form legend{font-size:13px;font-weight:700;padding:0 6px}
 .v-num{font-size:44px;line-height:1;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .v-cap{color:var(--muted);font-size:14px;margin-top:8px}
 .v-sig{text-align:right;flex:none}
-.v-sig span{display:block;font-size:12.5px;color:var(--muted)}
+.v-sig > span{display:block;font-size:12.5px;color:var(--muted)}
 .v-sig b{font-size:30px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
 .v-sig b.watch{font-size:18px;color:var(--flag)}
 .v-sum{font-size:17px;line-height:1.45;margin:16px 0 18px;max-width:52ch}
@@ -601,3 +601,92 @@ body:has(.legal){background:#FFFFFF}
 .dem-note{margin:12px 0 0;font-size:13px;font-weight:600;color:var(--flag)}
 .sec .na{margin-top:6px;font-size:12.5px;color:var(--muted)}
 .mk.dem{color:var(--flag);font-weight:600}
+
+/* ---------- score explanations (detail sheet) + Board header definitions ----------
+   Labels are plain text until hovered/focused; no icons. Popovers float on mouse devices and expand inline on touch.
+   Closed popovers use the hidden attribute (display:none), so nothing lingers in layout. */
+.sc{position:relative}
+.sc-btn{border:0;background:none;padding:0;margin:0;font:inherit;color:inherit;text-align:left;cursor:pointer;text-decoration:underline dotted;text-decoration-color:transparent;text-underline-offset:4px;transition:color .15s,text-decoration-color .15s}
+.sc-btn:hover,.sc-btn:focus-visible,.sc.open .sc-btn{color:var(--ink);text-decoration-color:currentColor}
+.sc-btn:focus-visible{outline:2px solid var(--ink);outline-offset:3px;border-radius:4px}
+.sc-line{margin:5px 0 0 162px;font-size:12.5px;line-height:1.4;color:var(--muted)}
+.v-sig .sc-btn{display:block;margin-left:auto;font-size:12.5px;color:var(--muted);text-align:right}
+.v-sig .sc-cap{display:block;font-size:12px;color:var(--muted);margin-top:4px;max-width:170px;margin-left:auto;line-height:1.35}
+.sc-pop{position:absolute;z-index:6;top:calc(100% + 8px);left:0;width:320px;max-width:100%;box-sizing:border-box;padding:14px 16px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 32px rgba(0,0,0,.12);text-align:left;font-size:13px;line-height:1.45}
+.sc-pop[hidden]{display:none}
+.sc.open .sc-pop{animation:scIn .16s ease-out}
+@keyframes scIn{from{opacity:0;transform:translateY(-3px)}}
+.sc-pop .sc-t{margin:0 0 4px;font-weight:600;font-size:13.5px;color:var(--ink)}
+.sc-pop .sc-def{margin:0 0 10px;color:var(--muted)}
+.sc-pop ul{margin:0 0 12px;padding-left:16px}
+.sc-pop li{margin:2px 0}
+.sc-links{display:flex;gap:18px;flex-wrap:wrap}
+.sc-go,.sc-links a{border:0;background:none;padding:0;font:inherit;font-weight:600;color:var(--ink);text-decoration:none;cursor:pointer}
+.sc-go:hover,.sc-links a:hover{text-decoration:underline;text-underline-offset:3px}
+.v-sig .sc-pop{left:auto;right:0;width:300px;max-width:calc(100vw - 72px)}
+.sc-how{display:inline-block;margin-top:12px;font-size:13px;font-weight:600;color:var(--muted);text-decoration:none}
+.sc-how:hover{color:var(--ink)}
+@media (max-width:560px){.verdict .sc-line{margin-left:0}}
+/* Touch: score rows expand inline (the Signal popover stays a small floating card inside the sheet, top right). */
+@media (hover:none),(pointer:coarse){
+  .vbars .sc-pop{position:static;width:auto;max-width:none;margin-top:10px;box-shadow:none}
+}
+@media (prefers-reduced-motion:reduce){.sc.open .sc-pop{animation:none}}
+.list{position:relative}
+.hd-pop{position:absolute;z-index:6;width:280px;padding:12px 14px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.10);font-size:12.5px;line-height:1.45}
+.hd-pop[hidden]{display:none}
+.hd-pop a{display:inline-block;margin-top:6px;font-weight:600;color:var(--ink);text-decoration:none}
+.hd-pop a:hover{text-decoration:underline;text-underline-offset:3px}
+@media (hover:hover) and (pointer:fine){
+  .lhead button[data-sort]:not([data-sort="name"]){text-decoration:underline dotted;text-decoration-color:transparent;text-underline-offset:4px;transition:text-decoration-color .15s}
+  .lhead button[data-sort]:not([data-sort="name"]):hover{text-decoration-color:currentColor}
+}
+
+/* ---------- How we score (/how-we-score): editorial, high whitespace, built from lib/methodology.ts ---------- */
+.hws{--hws-line:#E7E7EA;--hws-soft:#F6F6F8;--hws-muted:#6B6B70}
+.hws .hws-lede{font-size:20px;line-height:1.45;color:#0A0A0A;max-width:40ch;margin:0 0 32px;letter-spacing:-.01em}
+.hws-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}
+.lg-doc .hws-card{display:flex;flex-direction:column;gap:6px;padding:20px;border-radius:18px;background:var(--hws-soft);color:#0A0A0A;font-weight:400;text-decoration:none;transition:background .15s,transform .15s}
+.lg-doc .hws-card:hover{background:#EEEEF1}
+.hws-card b{font-size:18px;letter-spacing:-.01em}
+.hws-card span:last-child{font-size:14px;line-height:1.5;color:var(--hws-muted)}
+.hws-range{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--hws-muted)}
+.hws section{scroll-margin-top:24px}
+.lg-doc .hws h2 small{font-size:14px;font-weight:600;color:var(--hws-muted);margin-left:6px;letter-spacing:0}
+.hws-tiers{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0 4px}
+.hws-tier{border:1px solid var(--hws-line);border-radius:16px;padding:16px}
+.lg-doc .hws-tier h3{margin:0 0 8px;font-size:13px;font-weight:600;color:#0A0A0A;display:flex;align-items:center;gap:8px}
+.hws-tier h3::before{content:"";width:8px;height:8px;border-radius:50%;background:#3DCB52}
+.hws-tier.t-medium h3::before{background:#9BD9A6}
+.hws-tier.t-lower h3::before{background:#D4D4D8}
+.lg-doc .hws-tier ul{list-style:none;padding:0;margin:0;font-size:14px;line-height:1.45}
+.lg-doc .hws-tier li{margin:6px 0}
+.hws-dims{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:16px 0}
+.hws-dims div,.hws-labels div{display:flex;flex-direction:column;gap:4px;padding:16px;border-radius:16px;background:var(--hws-soft)}
+.hws-dims b{font-size:15px}
+.hws-dims span,.hws-labels div > span:last-child{font-size:14px;line-height:1.45;color:var(--hws-muted)}
+.lg-doc .hws .hws-note{font-size:14px;font-weight:600;color:#0A0A0A;margin:12px 0 0}
+.lg-doc .hws-scale{list-style:none;padding:0;margin:16px 0 0;border-top:1px solid var(--hws-line)}
+.hws-scale li{display:flex;gap:16px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--hws-line);margin:0}
+.hws-n{flex:none;width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;background:var(--hws-soft);font-weight:700;font-size:14px;font-variant-numeric:tabular-nums;transform:translateY(-2px)}
+.hws-scale li:first-child .hws-n{background:#3DCB52;color:#0A0A0A}
+.hws-scale li div{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:15px;line-height:1.45}
+.hws-scale li span:last-child{color:var(--hws-muted)}
+.hws-formula{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:16px 0;font-size:15px}
+.hws-formula span,.hws-formula b{padding:10px 16px;border-radius:999px;background:var(--hws-soft)}
+.hws-formula b{background:#0A0A0A;color:#FFFFFF}
+.hws-formula i{font-style:normal;color:var(--hws-muted)}
+.hws-labels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0 0}
+.hws-pill{align-self:flex-start;font-size:12px;font-weight:600;border-radius:999px;padding:3px 10px;background:#FFFFFF;border:1px solid var(--hws-line)}
+.lg-doc .hws-sep{list-style:none;padding:0;margin:16px 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}
+.lg-doc .hws-sep li{margin:0;padding:10px 0;border-bottom:1px solid var(--hws-line);font-size:15px;color:var(--hws-muted)}
+.hws-sep b{color:#0A0A0A}
+@media (max-width:640px){
+  .hws-cards,.hws-tiers,.hws-labels,.lg-doc .hws-sep{grid-template-columns:1fr}
+  .hws .hws-lede{font-size:18px}
+}
+/* Board header: a quiet pill to the methodology page, above the title. In normal flow (not fixed), Board only. */
+.bh-how{display:inline-flex;align-items:center;gap:6px;margin:0 0 14px;padding:6px 14px;border-radius:999px;background:var(--soft);color:var(--ink);font-size:13px;font-weight:600;text-decoration:none;transition:background .15s}
+.bh-how:hover{background:#E6E6EA}
+.bh-how:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.bhead .bh-how + h2{margin-top:0}

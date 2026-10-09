@@ -5,7 +5,9 @@ import { MARKUP } from "@/lib/ui/markup";
 import SiteFooter from "@/components/SiteFooter";
 import { mountApp } from "./legacy-app";
 
-type Props = { initial: unknown[]; canWrite: boolean; askEnabled: boolean; brandfetchId: string };
+import type { ClientMethod } from "@/lib/methodology";
+
+type Props = { initial: unknown[]; canWrite: boolean; askEnabled: boolean; brandfetchId: string; method: ClientMethod };
 
 let mounted = false;
 

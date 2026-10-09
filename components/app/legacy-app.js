@@ -12,8 +12,10 @@ const OPT={
   flags:["Hit-dependent","Decelerating","Conflicting figures","Metric-type risk","Customer concentration","Pending disclosure"],
   industry:["Software","Developer tools","Productivity","Consumer","Gaming","Entertainment","Media","Advertising","Creative services","Commerce","Health","Finance","Hardware","Consumer goods","Marketplaces","Services","Other"]
 };
-const DIMS=[["scale","Scale"],["growth","Growth"],["profit","Profitability"],["efficiency","Efficiency"],["durability","Durability"]];
-const WEIGHT={5:1,4:.9,3:.75,2:.55,1:.3,0:0};
+// Scoring constants come from the server (lib/methodology.ts + lib/rubric.ts), never copied here.
+const M=opts.method;
+const DIMS=M.dims.map(d=>[d.key,d.label]);
+const WEIGHT=M.weight,INC=M.include;
 const ROLE_C={Native:"var(--native)",Engine:"var(--engine)",Feature:"var(--feature)",None:"var(--none)"};
 const roleName=r=>r==="None"?"No AI":"AI "+(r||"").toLowerCase();
 const $=s=>document.querySelector(s);
@@ -42,7 +44,7 @@ const logoSrc=d=>{
 };
 const icoHTML=(d,cls)=>{const src=logoSrc(d);return `<span class="${cls}${src===STEAM_ICON?" ico-steam":""}" aria-hidden="true" data-ini="${initial(d.name)}">${src?`<img src="${esc(src)}" alt="" loading="lazy" draggable="false">`:initial(d.name)}</span>`};
 document.addEventListener("error",e=>{const t=e.target;if(t.tagName==="IMG"&&t.parentElement?.dataset.ini){t.parentElement.textContent=t.parentElement.dataset.ini}},true);
-function derive(d){const s=d.scores||{};const strength=DIMS.reduce((a,[k])=>a+num(s[k]),0);const conf=num(d.confidence);return {...d,strength,confidence:conf,signal:+(strength*WEIGHT[conf]).toFixed(1),included:conf>=2&&strength>=12}}
+function derive(d){const s=d.scores||{};const strength=DIMS.reduce((a,[k])=>a+num(s[k]),0);const conf=num(d.confidence);return {...d,strength,confidence:conf,signal:+(strength*WEIGHT[conf]).toFixed(1),included:conf>=INC.trust&&strength>=INC.strength}}
 
 /* ---------- routing ---------- */
 function route(){
@@ -657,12 +659,11 @@ function adoptionSplit(d){
   return {current,earlier:rows.filter(a=>!shown.has(a)).reverse()};
 }
 const adLine=a=>`${a.value} ${(a.metric||"").replace(/^./,c=>c.toLowerCase())}${a.change?` · ${a.change}`:""}`;
-const demandWord=d=>{const top=adoptionSplit(d).current[0];return top?`· ${adLine(top)}`:""};
-const adTags=a=>`${a.selfReported?'<span class="tag">Self-reported</span>':""}${a.tier==="Third-party analytics"?'<span class="tag">Estimate</span>':""}`;
+const adTags=a=>`${a.selfReported?'<span class="tag">Self-reported</span>':""}${a.tier==="Third-party analytics"?'<span class="tag">Estimated</span>':""}`;
 const adItem=a=>{const u=safeUrl(a.url);return `<li><div class="ev-v"><b>${esc(a.value)}${a.change?` <span class="chg">${esc(a.change)}</span>`:""}</b><span>${esc(a.metric)}${a.period?", "+esc(a.period):""}</span><span class="kind">${esc(a.kind)}</span></div><div class="ev-s"><span>${esc(a.tier)}</span>${adTags(a)}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(a.source||"Source")} ↗</a>`:(a.source?`<span>${esc(a.source)}</span>`:"")}${ageHTML(a)}</div></li>`};
 function adoptionHTML(d){
   const {current,earlier}=adoptionSplit(d);if(!current.length)return "";
-  return `<section class="sec"><h4>Demand and adoption</h4><ul class="evl">${current.map(adItem).join("")}</ul>${earlier.length?`<details class="ad-hist"><summary>Earlier figures (${earlier.length})</summary><ul class="evl">${earlier.map(adItem).join("")}</ul></details>`:""}</section>`;
+  return `<section class="sec" data-sec="adoption"><h4>Demand and adoption</h4><ul class="evl">${current.map(adItem).join("")}</ul>${earlier.length?`<details class="ad-hist"><summary>Earlier figures (${earlier.length})</summary><ul class="evl">${earlier.map(adItem).join("")}</ul></details>`:""}</section>`;
 }
 const capWord=c=>{if(!c)return "";if(c.status==="bootstrapped")return "Bootstrapped, no outside funding";if(c.status==="unknown")return "Not disclosed";
   const parts=[c.totalRaised?`Raised ${c.totalRaised}`:"",c.latestValuation?`valued at ${c.latestValuation}`:""].filter(Boolean);
@@ -745,9 +746,10 @@ function openSheet(html){lastFocus=document.activeElement;$("#sheetIn").innerHTM
 function closeSheet(){const sh=$("#sheet");sh.classList.remove("on");$("#scrim").classList.remove("on");lastFocus?.focus?.();
   clearTimeout(sheetGoneT);sheetGoneT=setTimeout(()=>{if(!sh.classList.contains("on"))sh.classList.add("gone")},reduce?0:600)}
 $("#scrim").addEventListener("click",closeSheet);
-addEventListener("keydown",e=>{if(e.key==="Escape"&&$("#sheet").classList.contains("on"))closeSheet()});
+// Escape closes an open score explanation first, then the sheet.
+addEventListener("keydown",e=>{if(e.key!=="Escape"||!$("#sheet").classList.contains("on"))return;const o=$("#sheetIn .sc.open");if(o){scSet(null);o.querySelector(".sc-btn")?.focus();return}closeSheet()});
 
-const TRUST_WORD=["No revenue evidence","Founder post or single source","Company claim or estimate","Company results or reputable press","Regulatory or acquirer filing","Audited filing"];
+const TRUST_WORD=M.trustWord;
 
 /* ---------- evidence freshness ----------
    STALE_DAYS matches lib/rechecks.ts, so what the public sees lines up with what agents are asked to re-check. */
@@ -760,7 +762,7 @@ function ageHTML(e){
   if(d===null)return `<span class="age warn" title="Added but never re-checked against the source.">Never re-checked</span>`;
   if(e.lastCheckStatus==="needs review")return `<span class="age warn" title="The last re-check could not confirm this figure.">Unconfirmed, checked ${esc(agoWord(d))}</span>`;
   if(d>STALE_DAYS)return `<span class="age warn" title="Older than the ${STALE_DAYS}-day re-check window.">Last checked ${esc(agoWord(d))}</span>`;
-  return `<span class="age">Verified ${esc(agoWord(d))}</span>`;
+  return `<span class="age">Checked ${esc(agoWord(d))}</span>`;
 }
 // A figure for a period before the current year may have been superseded by a newer release.
 const periodYear=p=>{const m=String(p||"").match(/(19|20)\d{2}/g);return m?Math.max(...m.map(Number)):null};
@@ -769,31 +771,120 @@ function periodHTML(e){
   if(!y||y>=new Date().getFullYear())return "";
   return `<span class="tag soft" title="This figure covers ${y}. A more recent period may now be published.">Newer period may exist</span>`;
 }
-const strengthWord=v=>v>=20?"Very strong":v>=15?"Strong":v>=12?"Moderate":"Too early to call";
+const strengthWord=v=>(M.strengthBands.find(([min])=>v>=min)||M.strengthBands[M.strengthBands.length-1])[1];
 // Must match lib/rubric.ts: "Verified losses: ..." starts with "Verified" but is a verified loss, not verified profit.
 const VERIFIED_LOSS=/^verified\W*(net\s+|operating\s+|gaap\s+|annual\s+)?loss/i;
 function profitState(d){const p=(d.profitability||"").trim();if(VERIFIED_LOSS.test(p))return "loss";return /^verified/i.test(p)?"verified":/claim|company-reported|self-reported/i.test(p)?"claimed":"none"}
 const PROFIT_HEAD={verified:"Profit verified",loss:"Verified loss",claimed:"Profit claimed, not verified",none:"Profit not verified"};
+
+/* ---------- score explanations ----------
+   Each headline score label in the detail sheet is a button. Desktop: hover (or click to pin) opens a small popover.
+   Touch: tap expands the same content inline under the score. Built only from the stored record and the methodology
+   constants (lib/methodology.ts); nothing is generated on load. */
+const HOVER=matchMedia("(hover:hover) and (pointer:fine)");
+const TIER_RANK=t=>{const i=M.tierOrder.indexOf(t);return i<0?99:i};
+const TIER_SHORT={"Company financial statements":"Company financials","Regulatory/acquirer filing":"Regulatory or acquirer filing","Third-party analytics":"Third-party estimate"};
+const tierName=t=>TIER_SHORT[t]||t||"an unlabelled source";
+const plural=(n,w)=>`${n} ${w}${n===1?"":"s"}`;
+const demWord=v=>(M.demand.find(x=>x.score===v)||{}).word||"";
+// Lowercase the first word only when it is a generic metric word, so names like "Fortune 500" keep their capital.
+const GENERIC=/^(paying|paid|active|monthly|daily|weekly|annual|total|cumulative|peak|new|net|repeat|retained|registered|concurrent|users?|customers?|subscribers?|clients?|copies|downloads|players|members|orders|units|businesses|companies|developers|creators|credit|revenue|sales)\b/i;
+const metricShort=m=>{const s=String(m||"").replace(/\s*\([^)]*\)/g,"");return GENERIC.test(s)?s.replace(/^./,c=>c.toLowerCase()):s};
+function retentionState(d){const r=(d.adoption||[]).filter(a=>M.retentionKinds.includes(a.kind));return !r.length?"none":r.some(a=>!a.selfReported)?"verified":"reported"}
+const RET_LINE={verified:"repeat usage verified",reported:"repeat usage reported",none:"retention not verified"};
+// {line: one-line summary under the score, reasons: popover bullets, src: which section "View sources" scrolls to}
+function explain(kind,d){
+  const evs=d.evidence||[],e=evs[0]||{},t=d.confidence,s=d.strength;
+  if(kind==="trust"){
+    if(!evs.length)return {line:"No revenue evidence logged yet",reasons:["No sourced revenue or profit figure yet"],src:"evidence"};
+    const best=[...evs].sort((a,b)=>TIER_RANK(a.tier)-TIER_RANK(b.tier))[0];
+    const n=new Set(evs.map(x=>x.url||x.source).filter(Boolean)).size||evs.length;
+    const stale=evs.filter(x=>{const a=daysSince(x.lastCheckedAt);return a===null||a>STALE_DAYS||x.lastCheckStatus==="needs review"}).length;
+    return {line:M.tierGroup[best.tier]==="lower"?"Company-reported figures · not independently verified":`${tierName(best.tier)} · ${plural(n,"source")}`,
+      reasons:[`Strongest source: ${tierName(best.tier)}`,e.selfReported?"Headline figure is self-reported":`Headline figure from ${tierName(e.tier)}`,stale?`${plural(stale,"figure")} not re-checked in the last ${STALE_DAYS} days`:`Every figure checked in the last ${STALE_DAYS} days`],src:"evidence"};
+  }
+  if(kind==="strength"){
+    const sc=d.scores||{},ds=M.dims.map(x=>({l:x.label,v:num(sc[x.key])})),hi=[...ds].sort((a,b)=>b.v-a.v),lo=[...ds].sort((a,b)=>a.v-b.v)[0];
+    return {line:hi[0].v===lo.v?`Even across all five dimensions: ${lo.v}/5 each`:`Strongest: ${hi[0].l} ${hi[0].v} · Weakest: ${lo.l} ${lo.v}`,
+      reasons:[`${hi[0].l} ${hi[0].v}/5 and ${hi[1].l} ${hi[1].v}/5 lead`,`${lo.l} is weakest at ${lo.v}/5`,PROFIT_HEAD[profitState(d)]],src:"breakdown"};
+  }
+  if(kind==="demand"){
+    const cur=adoptionSplit(d).current,top=cur[0],ret=retentionState(d),g=num((d.scores||{}).growth);
+    const head=top?`${top.value} ${metricShort(top.metric)}${top.change?` · ${top.change}`:""}`:"";
+    const reasons=cur.slice(0,2).map(a=>`${a.value} ${metricShort(a.metric)}${a.selfReported?" (self-reported)":a.tier==="Third-party analytics"?" (estimated)":""}`);
+    reasons.push(ret==="none"?"No verified retention or repeat-usage data yet":ret==="reported"?"Repeat usage reported by the company":"Retention or repeat usage independently supported");
+    if(g>=4)reasons.push(`Sustained growth (Growth ${g}/5)`);
+    return {line:head?`${head} · ${RET_LINE[ret]}`:RET_LINE[ret],reasons,src:cur.length?"adoption":"evidence"};
+  }
+  if(d.included)return {cap:`Strength ${s} · Trust ${t}/5`,reasons:[`Business strength ${s}/25 (${strengthWord(s)})`,`Trust in the numbers ${t}/5`,"Ties are broken by Demand"],src:"evidence"};
+  return {cap:`Needs Trust ${INC.trust}+ and Strength ${INC.strength}+`,reasons:[t<INC.trust?`Trust ${t}/5, needs ${INC.trust} or more`:"",s<INC.strength?`Business strength ${s}/25, needs ${INC.strength} or more`:""].filter(Boolean),src:"evidence"};
+}
+const SC_LABEL={trust:"Trust in the numbers",strength:"Business strength",demand:"Demand",signal:"Signal"};
+const scPop=(kind,x,title)=>`<div class="sc-pop" id="scp-${kind}" role="region" aria-label="${esc(SC_LABEL[kind])} explained" hidden><p class="sc-t">${title}</p><p class="sc-def">${esc(M.definitions[kind])}</p>${x.reasons.length?`<ul>${x.reasons.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`:""}<div class="sc-links"><button type="button" class="sc-go" data-go="${x.src}">${x.src==="breakdown"?"See breakdown":"View sources"} ↓</button><a href="/how-we-score#${kind}">How we score →</a></div></div>`;
+function scoreRow(kind,d,v,max,word){const x=explain(kind,d);
+  return `<div class="sc" data-sc="${kind}"><div class="vrow"><button type="button" class="vl sc-btn" aria-expanded="false" aria-controls="scp-${kind}">${SC_LABEL[kind]}</button><div class="vtrack"><span style="width:${v/max*100}%"></span></div><span class="vw"><b>${v}/${max}</b>${word?" "+esc(word):""}</span></div><p class="sc-line">${esc(x.line)}</p>${scPop(kind,x,`${SC_LABEL[kind]} ${v}/${max}${word?" · "+esc(word):""}`)}</div>`}
+function signalHTML(d){const x=explain("signal",d);
+  return `<div class="v-sig sc" data-sc="signal"><button type="button" class="sc-btn" aria-expanded="false" aria-controls="scp-signal">${d.included?"Signal":"Status"}</button><b${d.included?"":' class="watch"'}>${d.included?d.signal:"Watchlist"}</b><small class="sc-cap">${esc(x.cap)}</small>${scPop("signal",x,d.included?`Signal ${d.signal}`:"Watchlist")}</div>`}
+let scPinned=null,scHoverT=null,scLeaveT=null;
+function scSet(block,open,pin){
+  document.querySelectorAll("#sheetIn .sc.open").forEach(b=>{if(b===block)return;b.classList.remove("open");b.querySelector(".sc-pop").hidden=true;b.querySelector(".sc-btn").setAttribute("aria-expanded","false")});
+  if(!block){scPinned=null;return}
+  block.classList.toggle("open",open);block.querySelector(".sc-pop").hidden=!open;block.querySelector(".sc-btn").setAttribute("aria-expanded",String(open));
+  scPinned=open&&pin?block:null;
+}
+{const sIn=$("#sheetIn");
+  sIn.addEventListener("click",e=>{
+    const go=e.target.closest(".sc-go");
+    if(go){const t=sIn.querySelector(`[data-sec="${go.dataset.go}"]`)||sIn.querySelector('[data-sec="evidence"]');scSet(null);t?.scrollIntoView({behavior:reduce?"auto":"smooth",block:"start"});return}
+    const btn=e.target.closest(".sc-btn");
+    if(btn){const b=btn.closest(".sc"),pinned=scPinned===b;scSet(b,!pinned,!pinned);return}
+    if(!e.target.closest(".sc-pop"))scSet(null);
+  });
+  // Mouse only: hovering the label opens it after a short delay; leaving the label and its popover closes it unless pinned.
+  sIn.addEventListener("pointerover",e=>{if(!HOVER.matches||e.pointerType!=="mouse")return;const b=e.target.closest(".sc");if(!b)return;clearTimeout(scLeaveT);
+    if(e.target.closest(".sc-btn")&&!b.classList.contains("open")&&!scPinned){clearTimeout(scHoverT);scHoverT=setTimeout(()=>scSet(b,true,false),150)}});
+  sIn.addEventListener("pointerout",e=>{if(!HOVER.matches||e.pointerType!=="mouse")return;const b=e.target.closest(".sc");if(!b||b.contains(e.relatedTarget))return;clearTimeout(scHoverT);
+    if(scPinned!==b)scLeaveT=setTimeout(()=>{if(scPinned!==b&&b.classList.contains("open"))scSet(b,false,false)},140)});
+}
+// Board: the existing Trust, Business strength and Signal headers show a one-line definition on mouse hover or keyboard
+// focus. Clicking still sorts. No icons, nothing new in the layout; the headers are hidden on phones anyway.
+{const lh=$("#lhead"),list=lh?.parentElement,HD={confidence:"trust",strength:"strength",signal:"signal"};
+  if(lh&&list){
+    const pop=document.createElement("div");pop.className="hd-pop";pop.id="hdPop";pop.setAttribute("role","tooltip");pop.hidden=true;list.appendChild(pop);
+    let t=null;
+    const show=b=>{const k=HD[b.dataset.sort];pop.innerHTML=`${esc(M.definitions[k])} <a href="/how-we-score#${k}">How we score →</a>`;pop.hidden=false;
+      const lr=list.getBoundingClientRect(),br=b.getBoundingClientRect(),w=pop.offsetWidth;
+      pop.style.left=Math.max(0,Math.min(br.left-lr.left,lr.width-w))+"px";pop.style.top=(br.bottom-lr.top+8)+"px";b.setAttribute("aria-describedby","hdPop")};
+    const hide=()=>{pop.hidden=true};
+    const head=e=>{const b=e.target.closest("button[data-sort]");return b&&HD[b.dataset.sort]?b:null};
+    lh.addEventListener("pointerover",e=>{if(!HOVER.matches||e.pointerType!=="mouse")return;const b=head(e);clearTimeout(t);if(b)t=setTimeout(()=>show(b),200);else t=setTimeout(hide,150)});
+    lh.addEventListener("pointerout",e=>{if(pop.contains(e.relatedTarget))return;clearTimeout(t);t=setTimeout(hide,150)});
+    pop.addEventListener("pointerover",()=>clearTimeout(t));
+    pop.addEventListener("pointerout",e=>{if(lh.contains(e.relatedTarget)||pop.contains(e.relatedTarget))return;t=setTimeout(hide,150)});
+    lh.addEventListener("focusin",e=>{const b=head(e);if(b&&b.matches(":focus-visible"))show(b)});
+    lh.addEventListener("focusout",e=>{if(!pop.contains(e.relatedTarget))hide()});
+    lh.addEventListener("click",()=>{clearTimeout(t);hide()});
+  }}
 function openDetail(id){
   const d=items.find(i=>i.id===id);if(!d)return;
   const e=(d.evidence||[])[0]||{},ps=profitState(d),sc=d.scores||{};
   const bar=(label,v,max,word)=>`<div class="vrow"><span class="vl">${label}</span><div class="vtrack"><span style="width:${v/max*100}%"></span></div><span class="vw"><b>${v}/${max}</b>${word?" "+esc(word):""}</span></div>`;
-  const ev=(d.evidence||[]).map(x=>{const u=safeUrl(x.url);return `<li><div class="ev-v"><b>${esc(x.value)}</b><span>${esc(x.metric)}${x.period?", "+esc(x.period):""}</span>${periodHTML(x)}</div><div class="ev-s"><span>${esc(x.tier)}</span>${x.selfReported?'<span class="tag">Self-reported</span>':""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.source||"Source")} ↗</a>`:(x.source?`<span>${esc(x.source)}</span>`:"")}${ageHTML(x)}</div></li>`}).join("");
+  const ev=(d.evidence||[]).map(x=>{const u=safeUrl(x.url);return `<li><div class="ev-v"><b>${esc(x.value)}</b><span>${esc(x.metric)}${x.period?", "+esc(x.period):""}</span>${periodHTML(x)}</div><div class="ev-s"><span>${esc(x.tier)}</span>${x.selfReported?'<span class="tag">Self-reported</span>':""}${x.tier==="Third-party analytics"?'<span class="tag">Estimated</span>':""}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(x.source||"Source")} ↗</a>`:(x.source?`<span>${esc(x.source)}</span>`:"")}${ageHTML(x)}</div></li>`}).join("");
   const fact=(k,v)=>v?`<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`:"";
   openSheet(`<div class="dh"><div class="dh-id">${icoHTML(d,"ico")}<div><h3>${esc(d.name)}</h3><p class="dh-sub">${esc(d.form||"")}${d.customer?" · "+esc(d.customer):""} · <span class="role" style="--c:${ROLE_C[d.aiRole]||"var(--none)"}">${esc(roleName(d.aiRole))}</span></p></div></div><div class="dh-act">${safeUrl(d.website)?`<a class="btn visit" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">Visit site <span aria-hidden="true">↗</span></a>`:""}<button class="xbtn" data-close aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div></div>
   <section class="verdict">
     <div class="v-top"><div class="v-fig"><div class="v-num">${esc(e.value||"No figure yet")}</div><div class="v-cap">${esc(e.metric||"")}${e.period?", "+esc(e.period):""}${e.selfReported?' <span class="tag">Self-reported</span>':""}</div></div>
-    <div class="v-sig">${d.included?`<span>Signal</span><b>${d.signal}</b>`:`<span>Status</span><b class="watch">Watchlist</b>`}</div></div>
+    ${signalHTML(d)}</div>
     ${d.summary?`<p class="v-sum">${esc(d.summary)}</p>`:""}
-    <div class="vbars">${bar("Trust in the numbers",d.confidence,5,TRUST_WORD[d.confidence])}${bar("Business strength",d.strength,25,strengthWord(d.strength))}${dem(d)>=0?bar("Demand",d.demand,5,demandWord(d)):""}</div>
+    <div class="vbars">${scoreRow("trust",d,d.confidence,5,"")}${scoreRow("strength",d,d.strength,25,strengthWord(d.strength))}${dem(d)>=0?scoreRow("demand",d,d.demand,5,demWord(d.demand)):""}</div>
     ${unproven(d)?`<p class="dem-note">Strong demand, business not yet proven</p>`:""}
   </section>
   ${d.whyWorking?`<section class="sec"><h4>Why it's working</h4><p>${esc(d.whyWorking)}</p></section>`:""}
   <div class="pf pf-${ps}"><span class="pf-dot" aria-hidden="true"></span><div><b>${PROFIT_HEAD[ps]}</b>${/^not publicly verified\.?$/i.test((d.profitability||"").trim())||!d.profitability?"":`<span>${esc(d.profitability)}</span>`}</div></div>
   <div class="cols">${d.trigger?`<section class="sec"><h4>Why it's on the list</h4><p>${esc(d.trigger)}</p></section>`:""}${d.caveats?`<section class="sec"><h4>What could make this wrong</h4><p>${esc(d.caveats)}</p></section>`:""}</div>
   ${(d.flags||[]).length?`<section class="sec"><h4>Watch-outs</h4><div class="flags">${d.flags.map(f=>`<span>${esc(f)}</span>`).join("")}</div></section>`:""}
-  <section class="sec"><h4>Score breakdown</h4><div class="vbars">${DIMS.map(([k,l])=>bar(l,num(sc[k]),5,"")).join("")}</div></section>
-  <section class="sec"><h4>Evidence</h4>${ev?`<ul class="evl">${ev}</ul>`:"<p>No evidence logged yet.</p>"}</section>
+  <section class="sec" data-sec="breakdown"><h4>Score breakdown</h4><div class="vbars">${DIMS.map(([k,l])=>bar(l,num(sc[k]),5,"")).join("")}</div><a class="sc-how" href="/how-we-score">How we score →</a></section>
+  <section class="sec" data-sec="evidence"><h4>Evidence</h4>${ev?`<ul class="evl">${ev}</ul>`:"<p>No evidence logged yet.</p>"}</section>
   ${adoptionHTML(d)}
   ${d.takeaway?`<section class="sec"><h4>Opportunity takeaway</h4><p>${esc(d.takeaway)}</p><p class="na">A lesson from the evidence, not advice or a guaranteed opportunity.</p></section>`:""}
   ${(d.tags||[]).length?`<section class="sec"><h4>Tags</h4><div class="flags">${d.tags.map(t=>`<span>${esc(t)}</span>`).join("")}</div></section>`:""}
@@ -829,7 +920,7 @@ function openForm(d){
     <fieldset><legend>Evidence</legend><div id="evs">${(d.evidence&&d.evidence.length?d.evidence:[{}]).map(evRow).join("")}</div><button type="button" class="btn" id="addEv">Add evidence row</button></fieldset>
     <div class="err" id="ferr" role="alert"></div><div class="actions"><button type="submit" class="btn primary">${isNew?"Add company":"Save changes"}</button></div></form>`);
   const f=$("#f");
-  const live=()=>{const t=derive(collect(f));$("#live").innerHTML=`Strength <b>${t.strength}/25</b> · Signal <b>${t.included?t.signal:"watchlist"}</b>${t.included?"":" (needs trust of 2 or more and strength of 12 or more)"}`};
+  const live=()=>{const t=derive(collect(f));$("#live").innerHTML=`Strength <b>${t.strength}/25</b> · Signal <b>${t.included?t.signal:"watchlist"}</b>${t.included?"":` (needs trust of ${INC.trust} or more and strength of ${INC.strength} or more)`}`};
   f.addEventListener("change",live);live();
   $("#sheetIn [data-close]").addEventListener("click",()=>isNew?closeSheet():openDetail(d.id));
   $("#addEv").addEventListener("click",()=>$("#evs").insertAdjacentHTML("beforeend",evRow()));
