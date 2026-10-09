@@ -14,6 +14,28 @@ export const INDUSTRIES = ["Software", "Developer tools", "Productivity", "Consu
 export const ECOSYSTEM_ROLES = ["End product", "Platform", "Enabling tool", "Infrastructure", "Marketplace", "Service layer"] as const;
 // A tracked entity can be a company, or a product owned by another company (Claude by Anthropic, ReelShort by Crazy Maple Studio).
 export const ENTITY_TYPES = ["company", "product"] as const;
+// Demand / adoption signals. The last three are the business-appropriate equivalents for agencies, studios and services.
+export const ADOPTION_KINDS = [
+  "Paying customers",
+  "Paying-customer growth",
+  "Active users",
+  "Retention or repeat usage",
+  "Paid conversion",
+  "Paid expansion",
+  "Download or review velocity",
+  "Store ranking",
+  "Developer or community adoption",
+  "Repeat clients",
+  "Client wins or contract growth",
+  "Proprietary tools or IP",
+] as const;
+// Someone is paying: these can support Demand 4+.
+export const MONETIZED_KINDS: readonly string[] = ["Paying customers", "Paying-customer growth", "Paid conversion", "Paid expansion", "Repeat clients", "Client wins or contract growth"];
+// People or clients come back: required for Demand 5 and Durability 4+.
+export const RETENTION_KINDS: readonly string[] = ["Retention or repeat usage", "Repeat clients"];
+// Growth of paid usage: supports Growth 4+ alongside revenue growth.
+export const MONETIZED_GROWTH_KINDS: readonly string[] = ["Paying-customer growth", "Paid expansion", "Client wins or contract growth"];
+export const CAPITAL_STATUS = ["bootstrapped", "funded", "unknown"] as const;
 
 const score = z.number().int().min(0).max(5);
 const url = z.string().trim().regex(/^https?:\/\//i, "Must start with http:// or https://");
@@ -31,6 +53,39 @@ export const EvidenceSchema = z.object({
   lastCheckStatus: z.string().optional(),
 });
 export type Evidence = z.infer<typeof EvidenceSchema>;
+
+// One demand / adoption signal. Same provenance fields as evidence, so it is labeled, linked and re-checked the same way.
+// Kept historically: new periods are appended, never overwritten (see mergeAdoption in lib/proposals.ts).
+export const AdoptionSchema = z.object({
+  kind: z.enum(ADOPTION_KINDS),
+  metric: z.string().trim().min(1).max(120),
+  value: z.string().trim().min(1).max(80),
+  change: z.string().trim().max(60).optional(), // e.g. "+49% YoY"
+  period: z.string().trim().default(""),
+  tier: z.enum(TIERS),
+  selfReported: z.boolean(),
+  source: z.string().trim().default(""),
+  url: url.or(z.literal("")).default(""),
+  lastCheckedAt: z.string().optional(),
+  lastCheckStatus: z.string().optional(),
+});
+export type Adoption = z.infer<typeof AdoptionSchema>;
+
+// Capital is context only and never feeds any score. The status keeps "no outside funding" distinct from "not known".
+export const CapitalSchema = z
+  .object({
+    status: z.enum(CAPITAL_STATUS),
+    totalRaised: z.string().trim().max(60).optional(),
+    latestValuation: z.string().trim().max(60).optional(),
+    period: z.string().trim().max(60).optional(),
+    source: z.string().trim().max(120).optional(),
+    url: url.or(z.literal("")).optional(),
+    selfReported: z.boolean().optional(),
+  })
+  .refine((c) => !(c.status === "bootstrapped" && (c.totalRaised || c.latestValuation)), {
+    message: "A bootstrapped company cannot also have a raised amount or valuation.",
+  });
+export type Capital = z.infer<typeof CapitalSchema>;
 
 // Optional pointers the cron jobs use to watch official sources for a company.
 export const WatchSchema = z
@@ -79,6 +134,12 @@ export const CompanySchema = z.object({
   parentCompany: z.string().trim().min(1).max(120).optional(),
   discoveredFrom: DiscoveredFromSchema.optional(),
   discoveredAt: z.string().optional(),
+  // Demand / adoption layer. All optional: missing means unknown, never zero.
+  adoption: z.array(AdoptionSchema).max(60).optional(),
+  demand: score.optional(),
+  whyWorking: z.string().trim().max(700).optional(),
+  takeaway: z.string().trim().max(500).optional(),
+  capital: CapitalSchema.optional(),
   updatedAt: z.string().optional(),
 });
 export type Company = z.infer<typeof CompanySchema>;

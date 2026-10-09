@@ -14,6 +14,7 @@ For each company:
 ## How to report
 
 - The figure still matches its source, the tier is right, and nothing newer exists: `confirmed: true`, no patch, no evidence. This publishes automatically if validators pass.
+- A newer customer, retention, repeat-client or similar adoption figure is published: add it as `patch.adoption: [row]` with kind, metric, value, change, period, tier, selfReported, source and url. It is appended; the earlier row stays as history. Never record funding or valuation as adoption.
 - A newer period exists: include the new evidence rows with the correct `metric`, `value`, `period`, `type`, `tier`, `selfReported`, `source` and `url`.
 - A row has the wrong tier or type: include the corrected row. Only `Audited filing` for 10-K, 20-F or audited annual accounts. A 10-Q or interim report is `Regulatory/acquirer filing`. A company's own unaudited statements are `Company financial statements`.
 - You cannot verify a figure: `confirmed: false`, with `notes` saying exactly what you checked and what you could not find.

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { getStore } from "./store";
 import { diffCompany, getCompany, newId, saveCompany, stable, withCanonicalTags } from "./data";
-import { CompanyPatchSchema, CompanySchema, EvidenceSchema, slugify, stripComputed, type Company, type Evidence } from "./schema";
+import { AdoptionSchema, CompanyPatchSchema, CompanySchema, EvidenceSchema, slugify, stripComputed, type Adoption, type Company, type Evidence } from "./schema";
 import { derive } from "./rubric";
 import { getCandidate, setCandidateStatus } from "./candidates";
-import { companyRules, conflictCheck, evidenceRules, sourceChecks, type CheckResult } from "./validators";
+import { adoptionRules, companyRules, conflictCheck, evidenceRules, sourceChecks, type CheckResult } from "./validators";
 
 export const KINDS = ["new_company", "update", "add_evidence", "recheck_result"] as const;
 export type Kind = (typeof KINDS)[number];
@@ -36,7 +36,26 @@ export type Proposal = ProposalInputT & {
   reviewerNotes?: string;
 };
 
-const AddEvidencePayload = z.object({ evidence: z.array(EvidenceSchema).min(1), headline: z.boolean().default(false) });
+const AddEvidencePayload = z
+  .object({ evidence: z.array(EvidenceSchema).default([]), adoption: z.array(AdoptionSchema).default([]), headline: z.boolean().default(false) })
+  .refine((p) => p.evidence.length + p.adoption.length > 0, { message: "Send at least one evidence or adoption row." });
+
+// Adoption history is append-only: a new period is a new row, an earlier row is never overwritten or dropped by a proposal.
+const adKey = (a: Adoption) => `${a.kind}|${a.metric}|${a.period}|${a.url}`.toLowerCase();
+function mergeAdoption(before: Adoption[] = [], incoming: Adoption[] = []) {
+  const seen = new Set(before.map(adKey));
+  const added = incoming.filter((a) => {
+    const k = adKey(a);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return [...before, ...added];
+}
+const newAdoption = (before: Company | null, after: Company) => {
+  const old = new Set((before?.adoption || []).map(adKey));
+  return (after.adoption || []).map((a, i) => (old.has(adKey(a)) ? -1 : i)).filter((i) => i >= 0);
+};
 const RecheckPayload = z.object({
   confirmed: z.boolean(),
   notes: z.string().default(""),
@@ -80,7 +99,7 @@ export async function buildCandidate(p: ProposalInputT) {
         }
       : {};
     const after = CompanySchema.parse({ ...fromCandidate, ...payload, id });
-    return { id, before: null, after, changed: after.evidence.map((_, i) => i) };
+    return { id, before: null, after, changed: after.evidence.map((_, i) => i), adChanged: newAdoption(null, after) };
   }
   const id = p.companyId || "";
   const before = await getCompany(id);
@@ -89,18 +108,19 @@ export async function buildCandidate(p: ProposalInputT) {
 
   if (p.kind === "update") {
     const patch = onlyProvided(CompanyPatchSchema.parse(payload), payload);
-    const after = CompanySchema.parse({ ...before, ...patch, id });
+    const adoption = patch.adoption ? { adoption: mergeAdoption(before.adoption, patch.adoption) } : {};
+    const after = CompanySchema.parse({ ...before, ...patch, ...adoption, id });
     const old = new Set(before.evidence.map((e) => stable(e)));
     const changed = after.evidence.map((e, i) => (old.has(stable(e)) ? -1 : i)).filter((i) => i >= 0);
-    return { id, before, after, changed };
+    return { id, before, after, changed, adChanged: newAdoption(before, after) };
   }
 
   if (p.kind === "add_evidence") {
-    const { evidence, headline } = AddEvidencePayload.parse(payload);
+    const { evidence, adoption, headline } = AddEvidencePayload.parse(payload);
     const list = headline ? [...evidence, ...before.evidence] : [...before.evidence, ...evidence];
-    const after = CompanySchema.parse({ ...before, evidence: list });
+    const after = CompanySchema.parse({ ...before, evidence: list, ...(adoption.length ? { adoption: mergeAdoption(before.adoption, adoption) } : {}) });
     const changed = evidence.map((_, i) => (headline ? i : before.evidence.length + i));
-    return { id, before, after, changed };
+    return { id, before, after, changed, adChanged: newAdoption(before, after) };
   }
 
   // recheck_result
@@ -115,9 +135,10 @@ export async function buildCandidate(p: ProposalInputT) {
   list = [...list, ...added];
   // Same rule for a re-check patch: an omitted evidence field must not become an empty list.
   const patch = r.patch ? onlyProvided(r.patch, (payload as { patch?: unknown }).patch) : {};
-  const after = CompanySchema.parse({ ...before, ...patch, evidence: patch.evidence || list, id });
+  const adoption = patch.adoption ? { adoption: mergeAdoption(before.adoption, patch.adoption) } : {};
+  const after = CompanySchema.parse({ ...before, ...patch, ...adoption, evidence: patch.evidence || list, id });
   const changed = added.map((_, i) => before.evidence.length + i);
-  return { id, before, after, changed };
+  return { id, before, after, changed, adChanged: newAdoption(before, after) };
 }
 
 const LOG_ONLY_FIELDS = new Set(["lastCheckedAt", "lastCheckStatus"]);
@@ -154,8 +175,8 @@ function reviewReasons(p: ProposalInputT, before: Company | null, after: Company
 /** Fast checks at submission time. Throws on schema errors so the agent gets a 400. */
 export async function submitProposal(input: unknown) {
   const p = ProposalInput.parse(input);
-  const { id, before, after, changed } = await buildCandidate(p);
-  const checks = [...evidenceRules(after.evidence, changed), ...companyRules(after, !before)];
+  const { id, before, after, changed, adChanged } = await buildCandidate(p);
+  const checks = [...evidenceRules(after.evidence, changed), ...adoptionRules(after.adoption || [], adChanged), ...companyRules(after, !before, before)];
   const proposal: Proposal = {
     ...p,
     id: newId(),
@@ -182,8 +203,12 @@ export async function finishProposal(id: string) {
   const p = (await store.get("proposals", id)) as unknown as Proposal | null;
   if (!p || p.status !== "validating") return;
   try {
-    const { before, after, changed } = await buildCandidate(p);
-    const slow = [...(await sourceChecks(after.evidence, changed)), ...conflictCheck(before, after, changed)];
+    const { before, after, changed, adChanged } = await buildCandidate(p);
+    const slow = [
+      ...(await sourceChecks(after.evidence, changed)),
+      ...(await sourceChecks((after.adoption || []) as unknown as Evidence[], adChanged, "Adoption")),
+      ...conflictCheck(before, after, changed),
+    ];
     const checks = [...p.checks, ...slow];
     const reasons = reviewReasons(p, before, after, checks, changed);
     if (checks.some((c) => c.rule === "conflict")) reasons.push("Conflicting figures");

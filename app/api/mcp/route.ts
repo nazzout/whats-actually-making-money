@@ -15,6 +15,7 @@ const RULES =
   "Score exactly per HANDOFF.md section 4. Never store strength, signal or included; the server computes them. " +
   "Label self-reported, run-rate and estimated figures. Never record funding, valuation, GMV, users, units or consumer spend as type Revenue. " +
   "Projections are context only, never the first (headline) evidence item. If profit can't be verified, profitability is 'Not publicly verified.' " +
+  "Demand / adoption: adoption rows (kind, metric, value, change, period, tier, selfReported, source, url) are appended, never overwritten; demand is a separate 0 to 5 score; capital is {status: bootstrapped|funded|unknown, totalRaised, latestValuation} and never feeds any score. " +
   "Every proposal goes through validators and, unless it only confirms existing figures, waits for owner review.";
 
 const text = (v: unknown) => ({ content: [{ type: "text" as const, text: typeof v === "string" ? v : JSON.stringify(v, null, 2) }] });
@@ -68,7 +69,7 @@ const handler = createMcpHandler(
       "propose_update",
       {
         title: "Propose an update",
-        description: `Change fields on an existing company. Send only the fields that change. Sending "evidence" replaces the whole list. ${RULES}`,
+        description: `Change fields on an existing company. Send only the fields that change. Sending "evidence" replaces the whole list; sending "adoption" appends new rows to the history. ${RULES}`,
         inputSchema: z.object({ companyId: z.string(), patch: z.record(z.string(), z.unknown()), ...common }),
       },
       async ({ companyId, patch, reason, sourceUrls, proposedBy }) => propose({ kind: "update", companyId, payload: patch, reason, sourceUrls, proposedBy }),

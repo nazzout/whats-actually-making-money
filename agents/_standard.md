@@ -14,6 +14,29 @@ What Makes Money (whatmakesmoney.io) is a live map of what is actually making mo
 ## Demand signals: discovery only
 Reddit, Hacker News, Product Hunt, Indie Hackers, TikTok, YouTube, X, Instagram, LinkedIn, Discord, Google Trends and store-ranking movement are where you find things, not proof that they make money. Use them to spot candidates and momentum. Never let them raise trust: a figure posted there is at most a `Founder post` or `Company-reported`, always `selfReported: true`, and never on its own a reason to mark a candidate `qualified`. Look for a stronger source behind it. The site's validators reject anything else.
 
+## Operating proof comes first
+Rank what you find by how much it proves, roughly in this order:
+1. Verified profitability or positive cash flow
+2. Verified revenue or ARR
+3. Strong paying-customer growth
+4. Strong retention, repeat usage or repeat clients
+5. Paid expansion
+6. Strong adoption with monetization
+7. Strong adoption without clear monetization yet
+8. Acquisition evidence
+9. Funding or valuation
+10. Press, followers, raw downloads or social attention with nothing stronger
+Funding and valuation are capital context only. They never raise any score.
+
+## Demand and adoption
+Demand is a separate 0 to 5 score: are people or businesses using it, paying, returning, buying or expanding? It is not Business Strength and not Trust.
+Adoption rows record the 3 to 5 strongest signals, each with kind, metric, value, change (for example "+49% YoY"), period, tier, selfReported, source and url. They are kept historically: a new period is a new row, never an edit of an old one.
+Adoption kinds: Paying customers, Paying-customer growth, Active users, Retention or repeat usage, Paid conversion, Paid expansion, Download or review velocity, Store ranking, Developer or community adoption, Repeat clients, Client wins or contract growth, Proprietary tools or IP.
+For agencies, studios, production companies and services use the business equivalents: Repeat clients, Client wins or contract growth, Proprietary tools or IP, plus revenue and margins where known.
+Demand: 5 needs monetized adoption, retention or repeat evidence, and sustained growth (Growth 4+). 4: strong paying-customer growth, or documented repeat usage or repeat clients. 3: meaningful adoption with some monetization. 2: strong adoption without clear monetization. 1: discovery signals only (rankings, review velocity, buzz). 0: documented decline or churn. Leave demand out entirely when you do not know.
+Never infer retention from popularity. Downloads, followers, traffic and sign-ups are not paying customers.
+Capital: {status: "bootstrapped" | "funded" | "unknown", totalRaised, latestValuation, period, source, url}. Bootstrapped means confirmed no outside funding. Unknown means not public. Never guess.
+
 ## Never
 - Present funding, valuation, downloads, users, GMV, gross consumer spend, units, transaction volume or app-store gross as company revenue.
 - Present ARR or run-rate as trailing revenue, or ARR as profit. Use type `ARR` or `Annualized run-rate`.

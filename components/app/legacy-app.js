@@ -294,7 +294,7 @@ function dissolve(tile,e){
 function buildField(){
   if($("#explore").hidden)return;
   const vw=field.clientWidth||innerWidth, vh=field.clientHeight||innerHeight;
-  const sorted=[...items].sort((a,b)=>b.signal-a.signal),N=sorted.length;
+  const sorted=[...items].sort((a,b)=>b.signal-a.signal||dem(b)-dem(a)),N=sorted.length;
   if(!N){field.innerHTML="";nodes=[];return}
   const groups=groupDefs();
   // One company = a block of two rows: a tall row (icon + name card) over a short row (green metric + score).
@@ -623,10 +623,10 @@ function renderCohort(list){
 function renderRows(list){
   const el=$("#rows"),pod=$("#podium"); pod.hidden=true;pod.innerHTML=""; if(!db)return;
   if(!items.length){el.innerHTML=`<div class="empty">No companies yet. ${canWrite?"Add one, or send a research batch through the agent API.":"Ask the owner to add companies."}</div>`;return}
-  const s=[...list].sort((a,b)=>sortKey==="name"?(a.name||"").localeCompare(b.name||""):(b[sortKey]-a[sortKey])||(b.signal-a.signal));
+  const s=[...list].sort((a,b)=>sortKey==="name"?(a.name||"").localeCompare(b.name||""):(b[sortKey]-a[sortKey])||(b.signal-a.signal)||dem(b)-dem(a));
   if(!s.length){el.innerHTML=`<div class="empty">No companies match these filters. Clear the search or filters to see everything.</div>`;return}
   // Global rank by signal (watchlist entries are unranked), so numbers stay put when filtering.
-  const rk=new Map(items.filter(d=>d.included).sort((a,b)=>b.signal-a.signal).map((d,i)=>[d.id,i+1]));
+  const rk=new Map(items.filter(d=>d.included).sort((a,b)=>b.signal-a.signal||dem(b)-dem(a)).map((d,i)=>[d.id,i+1]));
   // Podium: the top 3 on the plain ranking only. The list then continues from #4 so nothing repeats.
   const top=sortKey==="signal"&&list.length===items.length?s.filter(d=>d.included).slice(0,3):[];
   if(top.length===3){pod.hidden=false;pod.innerHTML=top.map(d=>`<button type="button" class="pod" data-id="${esc(d.id)}"><span class="pr">#${rk.get(d.id)}</span>${icoHTML(d,"ico")}<span class="pn">${esc(d.name)}</span><span class="ps">${d.signal}</span><span class="pl">Signal</span></button>`).join("");
@@ -640,7 +640,31 @@ $("#seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)
 // One quiet marker: "New" for companies added in the last 14 days. (No "updated" marker: background re-checks touch
 // most records daily, so it would show on nearly every row.)
 const isNewCo=d=>{const t=Date.parse(d.addedAt||"");return Number.isFinite(t)&&Date.now()-t<14*864e5};
-const markHTML=d=>isNewCo(d)?`<span class="mk new">New</span>`:"";
+const markHTML=d=>(isNewCo(d)?`<span class="mk new">New</span>`:"")+(unproven(d)?`<span class="mk dem">Strong demand, business not yet proven</span>`:"");
+
+/* ---------- demand / adoption ----------
+   Demand is shown separately from Trust and Strength and only breaks ties in ranking. Adoption rows are kept
+   historically: the strongest current row per kind is shown (newest of that kind), earlier periods sit underneath. */
+const AD_ORDER=["Paying customers","Paying-customer growth","Retention or repeat usage","Paid expansion","Repeat clients","Client wins or contract growth","Paid conversion","Active users","Developer or community adoption","Download or review velocity","Store ranking","Proprietary tools or IP"];
+const dem=d=>Number.isFinite(d.demand)?d.demand:-1;
+// Demand 4+ but Business Strength still below the inclusion threshold.
+const unproven=d=>dem(d)>=4&&d.strength<12;
+function adoptionSplit(d){
+  const rows=d.adoption||[],latest=new Map();
+  rows.forEach((a,i)=>latest.set(a.kind,i)); // later rows are newer: the last of each kind is current
+  const current=[...latest.entries()].sort((x,y)=>AD_ORDER.indexOf(x[0])-AD_ORDER.indexOf(y[0])).slice(0,5).map(([,i])=>rows[i]);
+  const shown=new Set(current);
+  return {current,earlier:rows.filter(a=>!shown.has(a)).reverse()};
+}
+const adLine=a=>`${a.value} ${(a.metric||"").replace(/^./,c=>c.toLowerCase())}${a.change?` · ${a.change}`:""}`;
+const demandWord=d=>{const top=adoptionSplit(d).current[0];return top?`· ${adLine(top)}`:""};
+const adTags=a=>`${a.selfReported?'<span class="tag">Self-reported</span>':""}${a.tier==="Third-party analytics"?'<span class="tag">Estimate</span>':""}`;
+const adItem=a=>{const u=safeUrl(a.url);return `<li><div class="ev-v"><b>${esc(a.value)}${a.change?` <span class="chg">${esc(a.change)}</span>`:""}</b><span>${esc(a.metric)}${a.period?", "+esc(a.period):""}</span><span class="kind">${esc(a.kind)}</span></div><div class="ev-s"><span>${esc(a.tier)}</span>${adTags(a)}${u?`<a href="${esc(u)}" target="_blank" rel="noopener">${esc(a.source||"Source")} ↗</a>`:(a.source?`<span>${esc(a.source)}</span>`:"")}${ageHTML(a)}</div></li>`};
+function adoptionHTML(d){
+  const {current,earlier}=adoptionSplit(d);if(!current.length)return "";
+  return `<section class="sec"><h4>Demand and adoption</h4><ul class="evl">${current.map(adItem).join("")}</ul>${earlier.length?`<details class="ad-hist"><summary>Earlier figures (${earlier.length})</summary><ul class="evl">${earlier.map(adItem).join("")}</ul></details>`:""}</section>`;
+}
+const capWord=c=>!c?"":c.status==="bootstrapped"?"Bootstrapped, no outside funding":c.status==="unknown"?"Not disclosed":[c.totalRaised?`Raised ${c.totalRaised}`:"",c.latestValuation?`valued at ${c.latestValuation}`:""].filter(Boolean).join(", ")+(c.period?` (${c.period})`:"");
 $("#stats").addEventListener("click",e=>{const c=e.target.closest("[data-chip]");if(!c)return;const k=c.dataset.chip;chip=chip===k?"":k;renderBoard()});
 // Mobile filters: the four dropdowns live in a bottom sheet behind one button that shows how many are set.
 const FILT_IDS=["fInd","fRole","fDig","fForm"];
@@ -759,15 +783,19 @@ function openDetail(id){
     <div class="v-top"><div class="v-fig"><div class="v-num">${esc(e.value||"No figure yet")}</div><div class="v-cap">${esc(e.metric||"")}${e.period?", "+esc(e.period):""}${e.selfReported?' <span class="tag">Self-reported</span>':""}</div></div>
     <div class="v-sig">${d.included?`<span>Signal</span><b>${d.signal}</b>`:`<span>Status</span><b class="watch">Watchlist</b>`}</div></div>
     ${d.summary?`<p class="v-sum">${esc(d.summary)}</p>`:""}
-    <div class="vbars">${bar("Trust in the numbers",d.confidence,5,TRUST_WORD[d.confidence])}${bar("Business strength",d.strength,25,strengthWord(d.strength))}</div>
+    <div class="vbars">${bar("Trust in the numbers",d.confidence,5,TRUST_WORD[d.confidence])}${bar("Business strength",d.strength,25,strengthWord(d.strength))}${dem(d)>=0?bar("Demand",d.demand,5,demandWord(d)):""}</div>
+    ${unproven(d)?`<p class="dem-note">Strong demand, business not yet proven</p>`:""}
   </section>
+  ${d.whyWorking?`<section class="sec"><h4>Why it's working</h4><p>${esc(d.whyWorking)}</p></section>`:""}
   <div class="pf pf-${ps}"><span class="pf-dot" aria-hidden="true"></span><div><b>${PROFIT_HEAD[ps]}</b>${/^not publicly verified\.?$/i.test((d.profitability||"").trim())||!d.profitability?"":`<span>${esc(d.profitability)}</span>`}</div></div>
   <div class="cols">${d.trigger?`<section class="sec"><h4>Why it's on the list</h4><p>${esc(d.trigger)}</p></section>`:""}${d.caveats?`<section class="sec"><h4>What could make this wrong</h4><p>${esc(d.caveats)}</p></section>`:""}</div>
   ${(d.flags||[]).length?`<section class="sec"><h4>Watch-outs</h4><div class="flags">${d.flags.map(f=>`<span>${esc(f)}</span>`).join("")}</div></section>`:""}
   <section class="sec"><h4>Score breakdown</h4><div class="vbars">${DIMS.map(([k,l])=>bar(l,num(sc[k]),5,"")).join("")}</div></section>
   <section class="sec"><h4>Evidence</h4>${ev?`<ul class="evl">${ev}</ul>`:"<p>No evidence logged yet.</p>"}</section>
+  ${adoptionHTML(d)}
+  ${d.takeaway?`<section class="sec"><h4>Opportunity takeaway</h4><p>${esc(d.takeaway)}</p><p class="na">A lesson from the evidence, not advice or a guaranteed opportunity.</p></section>`:""}
   ${(d.tags||[]).length?`<section class="sec"><h4>Tags</h4><div class="flags">${d.tags.map(t=>`<span>${esc(t)}</span>`).join("")}</div></section>`:""}
-  <section class="sec"><h4>Details</h4><dl class="facts">${fact("Industry",d.industry)}${fact("Ecosystem role",d.ecosystemRole)}${d.entityType==="product"&&d.parentCompany?fact("Product of",d.parentCompany):""}${safeUrl(d.website)?`<div><dt>Website</dt><dd><a class="wlink" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">${esc(d.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))} ↗</a></dd></div>`:""}${fact("Revenue model",d.model)}${fact("Customer",d.customer)}${fact("Digital intensity",d.digital)}${fact("Launched",d.launched)}${fact("Re-check when",d.recheck)}</dl></section>
+  <section class="sec"><h4>Details</h4><dl class="facts">${fact("Industry",d.industry)}${fact("Ecosystem role",d.ecosystemRole)}${d.entityType==="product"&&d.parentCompany?fact("Product of",d.parentCompany):""}${safeUrl(d.website)?`<div><dt>Website</dt><dd><a class="wlink" href="${esc(d.website)}" target="_blank" rel="noopener noreferrer">${esc(d.website.replace(/^https?:\/\/(www\.)?/,"").replace(/\/$/,""))} ↗</a></dd></div>`:""}${fact("Revenue model",d.model)}${fact("Customer",d.customer)}${fact("Digital intensity",d.digital)}${fact("Launched",d.launched)}${fact("Capital (context only)",capWord(d.capital))}${fact("Re-check when",d.recheck)}</dl></section>
   <div class="actions">${location.hash!=="#board"?`<a class="btn" href="#board" data-goboard>See it on the board</a>`:""}${canWrite?`<button class="btn danger" data-del>Delete</button><button class="btn primary" data-edit>Edit</button>`:""}</div>`);
   const sh=$("#sheetIn");
   sh.querySelector("[data-close]").addEventListener("click",closeSheet);

@@ -1,4 +1,4 @@
-import type { Company, Evidence } from "./schema";
+import { MONETIZED_GROWTH_KINDS, MONETIZED_KINDS, RETENTION_KINDS, type Adoption, type Company, type Evidence } from "./schema";
 import { relDiff, textHasFigure } from "./amount";
 import { VERIFIED_LOSS } from "./rubric";
 import { ANALYTICS, DEMAND_SIGNALS, DEMAND_SIGNAL_TIERS, FILING_DOMAINS, PAYWALLED, REPUTABLE_PRESS, hostOf, isCompanyIR, onList } from "./sources-config";
@@ -67,9 +67,74 @@ export function evidenceRules(list: Evidence[], indexes: number[]): CheckResult[
   return out;
 }
 
-/** Company-level rules. */
-export function companyRules(after: Company, isNew: boolean): CheckResult[] {
+const FUNDING = /\b(funding|raised|raise|valuation|valued|series [a-f]|seed round)\b/i;
+const NOT_PAID = /\b(downloads?|installs?|followers?|visits?|traffic|wishlists?|signups?|sign-ups?|waitlist)\b/i;
+const RETENTION_WORDS = /retention|retain|repeat|churn|renew|returning|cohort|re-?order|recurring|again|%/i;
+
+/** Rules for new or changed adoption rows. */
+export function adoptionRules(list: Adoption[], indexes: number[]): CheckResult[] {
   const out: CheckResult[] = [];
+  for (const i of indexes) {
+    const a = list[i];
+    if (!a) continue;
+    const text = `${a.metric} ${a.value} ${a.change || ""}`;
+    const tag = `Adoption ${i + 1} (${a.metric})`;
+    if (FUNDING.test(text))
+      out.push({ rule: "adoption-funding", level: "fail", message: `${tag}: funding and valuation are capital, not adoption. Use the capital field.` });
+    if (MONETIZED_KINDS.includes(a.kind) && NOT_PAID.test(text))
+      out.push({ rule: "adoption-kind", level: "warn", message: `${tag}: downloads, followers, traffic or sign-ups are not paying customers. Use Active users or Download or review velocity.` });
+    if (RETENTION_KINDS.includes(a.kind) && !RETENTION_WORDS.test(text))
+      out.push({ rule: "adoption-retention", level: "warn", message: `${tag}: this reads as popularity, not retention or repeat usage. Retention must be stated, not inferred.` });
+    if ((a.tier === "Company-reported" || a.tier === "Founder post") && !a.selfReported)
+      out.push({ rule: "self-reported", level: "fail", message: `${tag}: ${a.tier} must be marked self-reported.` });
+    if (!a.url) out.push({ rule: "no-link", level: "warn", message: `${tag}: no source link.` });
+    const host = hostOf(a.url);
+    if (host && onList(host, DEMAND_SIGNALS) && (!DEMAND_SIGNAL_TIERS.includes(a.tier) || !a.selfReported))
+      out.push({ rule: "demand-signal", level: "fail", message: `${tag}: ${host} is a community or social source: Founder post or Company-reported at most, and self-reported.` });
+  }
+  return out;
+}
+
+// Monetized growth in the financial ledger: a growth figure on a revenue-type row, or two periods to compare.
+const FIN = ["Revenue", "ARR", "Annualized run-rate", "Net income", "Adj. EBITDA", "Free cash flow"];
+const GROWTH_WORDS = /grow|growth|yoy|year[- ]on[- ]year|\bup\b|\bfrom\b.*\bto\b|%|\d+x\b|doubled|tripled/i;
+function hasMonetizedGrowth(c: Company) {
+  if ((c.adoption || []).some((a) => MONETIZED_GROWTH_KINDS.includes(a.kind))) return true;
+  const fin = c.evidence.filter((e) => FIN.includes(e.type));
+  if (fin.some((e) => GROWTH_WORDS.test(`${e.metric} ${e.value}`))) return true;
+  return new Set(fin.filter((e) => e.period).map((e) => `${e.type}|${e.period}`)).size >= 2;
+}
+
+/** Demand, growth and durability rules. Only run when the fields they judge change, so routine re-checks are not blocked. */
+function demandRules(after: Company, isNew: boolean, before: Company | null): CheckResult[] {
+  const touched =
+    isNew ||
+    !before ||
+    JSON.stringify(before.scores) !== JSON.stringify(after.scores) ||
+    before.demand !== after.demand ||
+    (before.adoption || []).length !== (after.adoption || []).length;
+  if (!touched) return [];
+  const out: CheckResult[] = [];
+  const ad = after.adoption || [];
+  const monetized = ad.some((a) => MONETIZED_KINDS.includes(a.kind));
+  const retained = ad.some((a) => RETENTION_KINDS.includes(a.kind)) || after.evidence.some((e) => /retention|repeat|renewal|\bnrr\b|churn/i.test(e.metric));
+  const d = after.demand;
+  if (d !== undefined && d >= 4 && !monetized && !retained)
+    out.push({ rule: "demand-support", level: "warn", message: `Demand ${d} needs a paying-customer, paid conversion, paid expansion, repeat-client or retention signal. Usage alone supports 2 at most.` });
+  if (d === 5 && !(monetized && retained && after.scores.growth >= 4))
+    out.push({ rule: "demand-five", level: "warn", message: "Demand 5 needs monetized adoption, retention or repeat evidence, and sustained growth (Growth 4+)." });
+  if (after.scores.growth >= 4 && !hasMonetizedGrowth(after))
+    out.push({ rule: "growth-support", level: "warn", message: `Growth ${after.scores.growth} needs monetized growth evidence: revenue growth, paying-customer growth or client expansion. Users or downloads alone do not support it.` });
+  if (after.scores.durability >= 4 && !retained)
+    out.push({ rule: "durability-support", level: "warn", message: `Durability ${after.scores.durability} needs a retention, repeat-usage or repeat-client signal.` });
+  if (after.capital?.status === "funded" && !after.capital.totalRaised && !after.capital.latestValuation)
+    out.push({ rule: "capital", level: "warn", message: "Capital says funded but gives no amount raised or valuation. Use unknown if neither is public." });
+  return out;
+}
+
+/** Company-level rules. */
+export function companyRules(after: Company, isNew: boolean, before: Company | null = null): CheckResult[] {
+  const out: CheckResult[] = [...demandRules(after, isNew, before)];
   if (isNew && !after.website) out.push({ rule: "website", level: "fail", message: "New companies need a website." });
   if (!after.evidence.length) out.push({ rule: "evidence", level: "warn", message: "No evidence logged." });
   // A verified loss is a different claim from verified profit, so only verified-profit text needs a profit line.
@@ -91,13 +156,13 @@ export function companyRules(after: Company, isNew: boolean): CheckResult[] {
 const UA = () => process.env.SEC_USER_AGENT || "MakingMoneyResearch/1.0 (+https://vercel.app)";
 
 /** Fetch each link: does it load, is it behind a login, does the page contain the figure? */
-export async function sourceChecks(list: Evidence[], indexes: number[]): Promise<CheckResult[]> {
+export async function sourceChecks(list: Evidence[], indexes: number[], label = "Evidence"): Promise<CheckResult[]> {
   const out: CheckResult[] = [];
   await Promise.all(
     indexes.map(async (i) => {
       const e = list[i];
       if (!e?.url) return;
-      const tag = `Evidence ${i + 1} (${e.metric})`;
+      const tag = `${label} ${i + 1} (${e.metric})`;
       const host = hostOf(e.url);
       if (onList(host, PAYWALLED)) {
         out.push({ rule: "paywall", level: "warn", evidence: i, message: `${tag}: ${host} is usually paywalled. Not fetched; the owner should confirm by hand.` });

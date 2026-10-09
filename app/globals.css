@@ -593,3 +593,11 @@ body:has(.legal){background:#FFFFFF}
 .lg-doc .ct-email{margin:0 0 28px;font-size:clamp(24px,5vw,34px);font-weight:700;letter-spacing:-.02em;line-height:1.15;overflow-wrap:anywhere}
 .lg-doc .ct-email a{color:#0A0A0A;text-decoration:underline;text-decoration-color:#00D54B;text-decoration-thickness:3px;text-underline-offset:6px}
 .lg-doc .ct-email a:hover{color:#0A7A2F}
+/* Demand and adoption: the strongest current signal per kind, with earlier periods tucked underneath. */
+.ev-v .kind{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
+.ev-v .chg{font-size:13px;font-weight:600;color:#1E8F3A}
+.ad-hist{margin-top:8px;font-size:13px;color:var(--muted)}
+.ad-hist summary{cursor:pointer;font-weight:600}
+.dem-note{margin:12px 0 0;font-size:13px;font-weight:600;color:var(--flag)}
+.sec .na{margin-top:6px;font-size:12.5px;color:var(--muted)}
+.mk.dem{color:var(--flag);font-weight:600}

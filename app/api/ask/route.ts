@@ -21,12 +21,13 @@ export const maxDuration = 45;
 
 const VISITOR = "mm_vid";
 // Bump when a prompt changes so answers written under the old prompt are not served from cache.
-const PROMPT_VERSION = "4";
+const PROMPT_VERSION = "5";
 
 const BASE =
   "You answer questions for What Makes Money, a research dataset of businesses: their revenue, profitability, growth, business models, AI role and evidence quality. " +
   "Each company has a trust score (0 to 5, how reliable the financial evidence is) and a business strength score (0 to 25). included false means watchlist. " +
   "Describe evidence by its exact tier. Only call a figure audited if its tier is Audited filing. A profitability note starting \"Verified loss\" is a verified loss, not profit. " +
+  "demand (0 to 5) is separate from strength: it is evidence that people or businesses use, pay for, return to or expand use of the product. adoption rows are demand evidence, never revenue. capital (funding, valuation) is context only and never proof a business works. " +
   "No jargon, no filler, no em dashes, do not repeat the question. Mention trust where it matters and state uncertainty directly. ";
 
 const DATASET_SYSTEM =
@@ -103,6 +104,9 @@ export async function POST(req: Request) {
     trust: d.confidence, strength: d.strength, signal: d.signal, included: d.included,
     profitability: d.profitability, flags: d.flags, summary: d.summary,
     industry: d.industry, ecosystemRole: d.ecosystemRole, tags: d.tags, entityType: d.entityType, parentCompany: d.parentCompany,
+    demand: d.demand, whyWorking: d.whyWorking, takeaway: d.takeaway, capital: d.capital,
+    // Newest rows last in storage; send the latest few so answers use current figures.
+    adoption: (d.adoption || []).slice(-6).map((a) => ({ kind: a.kind, metric: a.metric, value: a.value, change: a.change, period: a.period, tier: a.tier, selfReported: a.selfReported })),
     evidence: d.evidence.slice(0, 4).map((e) => ({ metric: e.metric, value: e.value, period: e.period, type: e.type, tier: e.tier, selfReported: e.selfReported })),
   }));
   const dataText = `DATA: ${JSON.stringify(data)}`;

@@ -1,0 +1,66 @@
+name: Backfill - demand layer
+
+# Manual only. Adds adoption, demand, why it's working, takeaway and capital to existing companies through
+# normal update proposals, which all land in the owner review queue.
+on:
+  workflow_dispatch:
+    inputs:
+      ids:
+        description: "Comma-separated company ids, at most 3 per run"
+        required: true
+
+concurrency:
+  group: lane-backfill
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: https://whatmakesmoney.io
+  MODEL: ${{ vars.LANE_BACKFILL_MODEL || 'claude-opus-5-5' }}
+  MAX_BUDGET_USD: ${{ vars.LANE_BACKFILL_BUDGET_USD || '2' }}
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check input
+        id: ids
+        env:
+          IDS: ${{ inputs.ids }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          ids = [i.strip() for i in os.environ["IDS"].split(",") if i.strip()]
+          bad = [i for i in ids if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,59}", i)]
+          if bad or not ids or len(ids) > 3:
+              raise SystemExit(f"Need 1 to 3 valid company ids, got {ids}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("list=" + ", ".join(ids) + "\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(f"**Backfilling:** {', '.join(ids)}\n\n")
+          PY
+
+      - name: Run backfill agent
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AGENT_API_KEY: ${{ secrets.AGENT_API_KEY }}
+          LANE: backfill
+          AGENT_NAME: backfill-agent
+          LIST: ${{ steps.ids.outputs.list }}
+        run: |
+          chmod +x scripts/agent-run.sh
+          cat agents/_standard.md agents/lane-backfill.md > prompt.md
+          scripts/agent-run.sh prompt.md "$MODEL" "$MAX_BUDGET_USD" transcript.jsonl "Companies for this run, in order: $LIST"
+
+      - name: Upload transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lane-backfill-transcript
+          path: transcript.jsonl
+          retention-days: 30
